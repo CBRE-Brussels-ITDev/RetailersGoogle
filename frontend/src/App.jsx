@@ -3,6 +3,7 @@ import './index.css';
 import Map from './components/Map';
 import Modal from './components/Modal';
 import SearchPanel from './components/SearchPanel';
+import PlacesSidebar from './components/PlacesSidebar';
 import GooglePlacesService from './services/GooglePlaces';
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
   const [searchResultsData, setSearchResultsData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const handlePlaceClick = async (placeId) => {
     try {
@@ -63,6 +65,7 @@ function App() {
 
       setSearchResults(results.placeIds || []);
       setSearchResultsData(results.places || []);
+      setSidebarVisible(true); // Show sidebar when results are found
       
       // Add circle to map to show search area
       if (mapRef.current) {
@@ -80,9 +83,23 @@ function App() {
   };
 
   return (
-    <div style={{ position: 'relative', height: '100vh', width: '100vw' }}>
-      {/* Map */}
-      <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ position: 'relative', height: '100vh', width: '100vw', display: 'flex' }}>
+      {/* Sidebar */}
+      <PlacesSidebar
+        visible={sidebarVisible}
+        places={searchResultsData}
+        onPlaceClick={handlePlaceClick}
+        onClose={() => setSidebarVisible(false)}
+        selectedLocation={selectedLocation}
+        isLoading={isLoading}
+      />
+
+      {/* Map Container */}
+      <div style={{ 
+        flex: 1, 
+        width: sidebarVisible ? 'calc(100% - 400px)' : '100%',
+        transition: 'width 0.3s ease'
+      }}>
         <Map
           apiKey={API_KEY}
           ref={mapRef}

@@ -63,6 +63,60 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* Sidebar specific styles */
+.place-item:hover {
+  background-color: #f0f8ff !important;
+  border-color: #007bff !important;
+  transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+}
+
+.place-item:active {
+  transform: translateX(1px);
+  background-color: #e6f3ff !important;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Scrollbar styling for sidebar */
+.places-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.places-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.places-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.places-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Search input focus effect */
+input:focus, select:focus {
+  border-color: #007bff !important;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Button hover effects */
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
