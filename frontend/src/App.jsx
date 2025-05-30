@@ -1,23 +1,78 @@
 import React, { useRef, useState } from 'react';
-import './index.css'; // Import your CSS file
+import './index.css';
 import Map from './components/Map';
 import Modal from './components/Modal';
-import GooglePlacesService from './services/GooglePlaces';
+import SearchPanel from './components/SearchPanel';
+import GooglePlacesService from './services/GooglePlacesService';
 
 function App() {
-  const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY; // Load API key from environment variables
-  const mapRef = useRef(null); // Reference to the Map component
-  const [placeDetails, setPlaceDetails] = useState(null); // State to store the place details response
-  const [isModalOpen, setIsModalOpen] = useState(false); // State to control modal visibility
+  const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const mapRef = useRef(null);
+  const [placeDetails, setPlaceDetails] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
 
   const handlePlaceClick = async (placeId) => {
     try {
       const response = await GooglePlacesService.getPlaceDetails(placeId);
       console.log('Place Details Response:', response);
-      setPlaceDetails(response); // Store the place details in state
-      setIsModalOpen(true); // Open the modal
+      setPlaceDetails(response);
+      setIsModalOpen(true);
     } catch (error) {
       console.error('Error fetching place details:', error);
+    }
+  };
+
+  const handleMapClick = (lat, lng) => {
+    setSelectedLocation({ lat, lng });
+    console.log('Map clicked at:', { lat, lng });
+  };
+
+  const handleSearch = async (searchParams) => {
+    if (!selectedLocation) {
+      alert('Please click on the map to select a location first');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('Searching with params:', searchParams);
+      
+      let results;
+      if (searchParams.getAllSectors) {
+        // Search for all sectors
+        results = await GooglePlacesService.getPlacesInRadius(
+          selectedLocation.lat,
+          selectedLocation.lng,
+          searchParams.radius,
+          null, // No specific category
+          true // getAllSectors = true
+        );
+      } else {
+        // Search for specific category
+        results = await GooglePlacesService.getPlacesInRadius(
+          selectedLocation.lat,
+          selectedLocation.lng,
+          searchParams.radius,
+          searchParams.category
+        );
+      }
+
+      setSearchResults(results);
+      
+      // Add circle to map to show search area
+      if (mapRef.current) {
+        mapRef.current.addCircle(selectedLocation, searchParams.radius);
+      }
+
+      console.log('Search results:', results);
+    } catch (error) {
+      console.error('Error searching places:', error);
+      alert('Error searching places. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -28,10 +83,22 @@ function App() {
         <Map
           apiKey={API_KEY}
           ref={mapRef}
-          onPlaceClick={handlePlaceClick} // Pass the click handler to the Map component
+          onPlaceClick={handlePlaceClick}
+          onMapClick={handleMapClick}
+          selectedLocation={selectedLocation}
+          searchResults={searchResults}
           style={{ width: '100%', height: '100%' }}
         />
       </div>
+
+      {/* Search Panel */}
+      <SearchPanel 
+        onSearch={handleSearch}
+        isLoading={isLoading}
+        selectedLocation={selectedLocation}
+        resultsCount={searchResults.length}
+        mapRef={mapRef}
+      />
 
       {/* Modal */}
       <Modal
@@ -39,40 +106,6 @@ function App() {
         onClose={() => setIsModalOpen(false)}
         data={placeDetails}
       />
-      {/* Dropdown Menu */}
-      <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
-        <select
-          style={{
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ccc',
-            backgroundColor: '#fff',
-          }}
-          onChange={(e) => console.log('Selected category:', e.target.value)}
-        >
-          <option value="bakery">Bakery</option>
-          <option value="bicycle_store">Bicycle Store</option>
-          <option value="book_store">Book Store</option>
-          <option value="clothing_store">Clothing Store</option>
-          <option value="convenience_store">Convenience Store</option>
-          <option value="department_store">Department Store</option>
-          <option value="drugstore">Drugstore</option>
-          <option value="electronics_store">Electronics Store</option>
-          <option value="florist">Florist</option>
-          <option value="furniture_store">Furniture Store</option>
-          <option value="hardware_store">Hardware Store</option>
-          <option value="home_goods_store">Home Goods Store</option>
-          <option value="jewelry_store">Jewelry Store</option>
-          <option value="liquor_store">Liquor Store</option>
-          <option value="pet_store">Pet Store</option>
-          <option value="pharmacy">Pharmacy</option>
-          <option value="shoe_store">Shoe Store</option>
-          <option value="shopping_mall">Shopping Mall</option>
-          <option value="store">Store</option>
-          <option value="supermarket">Supermarket</option>
-          <option value="lawyer">Lawyer</option>
-        </select>
-      </div>
     </div>
   );
 }
