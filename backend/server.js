@@ -106,13 +106,30 @@ app.post('/get-places-in-radius', async (req, res) => {
                 index === self.findIndex(p => p.place_id === place.place_id)
             );
 
+            // Extract coordinates and create enhanced place data
+            const placesWithCoords = uniquePlaces.map(place => ({
+                place_id: place.place_id,
+                name: place.name,
+                rating: place.rating,
+                user_ratings_total: place.user_ratings_total,
+                types: place.types,
+                search_type: place.search_type,
+                coordinates: {
+                    lat: place.geometry.location.lat,
+                    lng: place.geometry.location.lng
+                },
+                vicinity: place.vicinity,
+                price_level: place.price_level,
+                business_status: place.business_status
+            }));
+
             const placeIds = uniquePlaces.map(place => place.place_id);
             
             console.log(`Found ${uniquePlaces.length} unique places across ${commonTypes.length} categories`);
             
             res.json({ 
-                placeIds, 
-                places: uniquePlaces,
+                placeIds,
+                places: placesWithCoords,
                 totalFound: uniquePlaces.length,
                 searchTypes: commonTypes,
                 searchParams: { lat, lng, radius, getAllSectors: true }
@@ -134,11 +151,28 @@ app.post('/get-places-in-radius', async (req, res) => {
                 }
             );
 
+            // Extract coordinates and create enhanced place data
+            const placesWithCoords = response.data.results.map(place => ({
+                place_id: place.place_id,
+                name: place.name,
+                rating: place.rating,
+                user_ratings_total: place.user_ratings_total,
+                types: place.types,
+                search_type: category,
+                coordinates: {
+                    lat: place.geometry.location.lat,
+                    lng: place.geometry.location.lng
+                },
+                vicinity: place.vicinity,
+                price_level: place.price_level,
+                business_status: place.business_status
+            }));
+
             const placeIds = response.data.results.map(place => place.place_id);
             
             res.json({ 
-                placeIds, 
-                places: response.data.results,
+                placeIds,
+                places: placesWithCoords,
                 totalFound: response.data.results.length,
                 searchParams: { lat, lng, radius, category }
             });
@@ -183,11 +217,28 @@ app.post('/get-all-places-text-search', async (req, res) => {
             }
         );
 
+        // Extract coordinates and create enhanced place data
+        const placesWithCoords = response.data.results.map(place => ({
+            place_id: place.place_id,
+            name: place.name,
+            rating: place.rating,
+            user_ratings_total: place.user_ratings_total,
+            types: place.types,
+            search_type: 'text_search',
+            coordinates: {
+                lat: place.geometry.location.lat,
+                lng: place.geometry.location.lng
+            },
+            vicinity: place.vicinity || place.formatted_address,
+            price_level: place.price_level,
+            business_status: place.business_status
+        }));
+
         const placeIds = response.data.results.map(place => place.place_id);
         
         res.json({ 
-            placeIds, 
-            places: response.data.results,
+            placeIds,
+            places: placesWithCoords,
             totalFound: response.data.results.length,
             searchParams: { lat, lng, radius, query }
         });

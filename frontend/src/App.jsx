@@ -3,7 +3,7 @@ import './index.css';
 import Map from './components/Map';
 import Modal from './components/Modal';
 import SearchPanel from './components/SearchPanel';
-import GooglePlacesService from './services/GooglePlacesService';
+import GooglePlacesService from './services/GooglePlaces';
 
 function App() {
   const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -11,6 +11,7 @@ function App() {
   const [placeDetails, setPlaceDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
+  const [searchResultsData, setSearchResultsData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
 
@@ -60,7 +61,8 @@ function App() {
         );
       }
 
-      setSearchResults(results);
+      setSearchResults(results.placeIds || []);
+      setSearchResultsData(results.places || []);
       
       // Add circle to map to show search area
       if (mapRef.current) {
@@ -68,6 +70,7 @@ function App() {
       }
 
       console.log('Search results:', results);
+      console.log(`Found ${results.totalFound} places with coordinates`);
     } catch (error) {
       console.error('Error searching places:', error);
       alert('Error searching places. Please try again.');
@@ -87,6 +90,7 @@ function App() {
           onMapClick={handleMapClick}
           selectedLocation={selectedLocation}
           searchResults={searchResults}
+          searchResultsData={searchResultsData}
           style={{ width: '100%', height: '100%' }}
         />
       </div>

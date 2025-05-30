@@ -25,7 +25,13 @@ const GooglePlacesService = {
             const response = await axios.post(`${BASE_URL}/get-places-in-radius`, requestBody);
             
             console.log('Places response:', response.data);
-            return response.data.placeIds || []; // Return place IDs array
+            return {
+                placeIds: response.data.placeIds || [],
+                places: response.data.places || [],
+                totalFound: response.data.totalFound || 0,
+                searchTypes: response.data.searchTypes || [],
+                searchParams: response.data.searchParams || {}
+            };
         } catch (error) {
             console.error('Error fetching places in radius:', error);
             throw error;
@@ -43,7 +49,12 @@ const GooglePlacesService = {
             });
             
             console.log('Text search response:', response.data);
-            return response.data.placeIds || [];
+            return {
+                placeIds: response.data.placeIds || [],
+                places: response.data.places || [],
+                totalFound: response.data.totalFound || 0,
+                searchParams: response.data.searchParams || {}
+            };
         } catch (error) {
             console.error('Error fetching places via text search:', error);
             throw error;

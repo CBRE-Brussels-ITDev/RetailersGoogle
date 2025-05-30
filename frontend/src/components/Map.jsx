@@ -1,7 +1,7 @@
 import React, { useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
 import { APIProvider, Map as GoogleMap } from '@vis.gl/react-google-maps';
 
-const Map = forwardRef(({ apiKey, onPlaceClick, onMapClick, selectedLocation, searchResults }, ref) => {
+const Map = forwardRef(({ apiKey, onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData }, ref) => {
   const mapInstance = useRef(null);
   const circleRef = useRef(null);
   const markersRef = useRef([]);
@@ -111,100 +111,82 @@ const Map = forwardRef(({ apiKey, onPlaceClick, onMapClick, selectedLocation, se
     }
   };
 
-  // Add markers for search results
-  const addSearchResultMarkers = async (placeIds) => {
-    if (!mapInstance.current || !window.google?.maps || !placeIds.length) return;
+  // Add markers for search results using coordinates from backend
+  const addSearchResultMarkers = (placesData) => {
+    if (!mapInstance.current || !window.google?.maps || !placesData?.length) return;
 
-    const service = new window.google.maps.places.PlacesService(mapInstance.current);
-    
     // Colors for different place types
     const placeColors = [
       '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7',
       '#fd79a8', '#6c5ce7', '#a29bfe', '#fd7f6f', '#7bed9f'
     ];
     
-    placeIds.forEach((placeId, index) => {
-      // Add delay to avoid hitting rate limits
-      setTimeout(() => {
-        service.getDetails(
-          {
-            placeId: placeId,
-            fields: ['geometry', 'name', 'place_id', 'types', 'rating']
-          },
-          (place, status) => {
-            if (status === window.google.maps.places.PlacesServiceStatus.OK && place.geometry) {
-              const position = {
-                lat: place.geometry.location.lat(),
-                lng: place.geometry.location.lng()
-              };
-              
-              // Get color based on place type or use cycling colors
-              const colorIndex = index % placeColors.length;
-              const markerColor = placeColors[colorIndex];
-              
-              // Create enhanced marker with rating info
-              const marker = new window.google.maps.Marker({
-                position: position,
-                map: mapInstance.current,
-                title: `${place.name || 'Place'}${place.rating ? ` (⭐${place.rating})` : ''}`,
-                icon: {
-                  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" fill="${markerColor}" stroke="white" stroke-width="2"/>
-                      <circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/>
-                      ${place.rating ? `<text x="12" y="16" text-anchor="middle" font-size="8" fill="black">★</text>` : ''}
-                    </svg>
-                  `),
-                  scaledSize: new window.google.maps.Size(24, 24),
-                  anchor: new window.google.maps.Point(12, 12)
-                }
-              });
+    placesData.forEach((place, index) => {
+      const position = place.coordinates;
+      
+      // Get color based on place type or use cycling colors
+      const colorIndex = index % placeColors.length;
+      const markerColor = placeColors[colorIndex];
+      
+      // Create enhanced marker with rating info
+      const marker = new window.google.maps.Marker({
+        position: position,
+        map: mapInstance.current,
+        title: `${place.name || 'Place'}${place.rating ? ` (⭐${place.rating})` : ''}${place.search_type ? ` [${place.search_type}]` : ''}`,
+        icon: {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" fill="${markerColor}" stroke="white" stroke-width="2"/>
+              <circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/>
+              ${place.rating ? `<text x="12" y="16" text-anchor="middle" font-size="8" fill="black">★</text>` : ''}
+            </svg>
+          `),
+          scaledSize: new window.google.maps.Size(24, 24),
+          anchor: new window.google.maps.Point(12, 12)
+        }
+      });
 
-              // Add circle around each place
-              const circleRadius = place.rating ? Math.max(50, place.rating * 20) : 75;
-              addPlaceCircle(position, circleRadius, markerColor);
+      // Add circle around each place
+      const circleRadius = place.rating ? Math.max(50, place.rating * 20) : 75;
+      addPlaceCircle(position, circleRadius, markerColor);
 
-              // Add click listener
-              marker.addListener('click', () => {
-                if (onPlaceClick) {
-                  onPlaceClick(place.place_id);
-                }
-              });
+      // Add click listener
+      marker.addListener('click', () => {
+        if (onPlaceClick) {
+          onPlaceClick(place.place_id);
+        }
+      });
 
-              // Add hover effects
-              marker.addListener('mouseover', () => {
-                marker.setIcon({
-                  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-                      <circle cx="14" cy="14" r="12" fill="${markerColor}" stroke="white" stroke-width="3"/>
-                      <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
-                      ${place.rating ? `<text x="14" y="18" text-anchor="middle" font-size="10" fill="black">★</text>` : ''}
-                    </svg>
-                  `),
-                  scaledSize: new window.google.maps.Size(28, 28),
-                  anchor: new window.google.maps.Point(14, 14)
-                });
-              });
+      // Add hover effects
+      marker.addListener('mouseover', () => {
+        marker.setIcon({
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+              <circle cx="14" cy="14" r="12" fill="${markerColor}" stroke="white" stroke-width="3"/>
+              <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
+              ${place.rating ? `<text x="14" y="18" text-anchor="middle" font-size="10" fill="black">★</text>` : ''}
+            </svg>
+          `),
+          scaledSize: new window.google.maps.Size(28, 28),
+          anchor: new window.google.maps.Point(14, 14)
+        });
+      });
 
-              marker.addListener('mouseout', () => {
-                marker.setIcon({
-                  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" fill="${markerColor}" stroke="white" stroke-width="2"/>
-                      <circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/>
-                      ${place.rating ? `<text x="12" y="16" text-anchor="middle" font-size="8" fill="black">★</text>` : ''}
-                    </svg>
-                  `),
-                  scaledSize: new window.google.maps.Size(24, 24),
-                  anchor: new window.google.maps.Point(12, 12)
-                });
-              });
+      marker.addListener('mouseout', () => {
+        marker.setIcon({
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" fill="${markerColor}" stroke="white" stroke-width="2"/>
+              <circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/>
+              ${place.rating ? `<text x="12" y="16" text-anchor="middle" font-size="8" fill="black">★</text>` : ''}
+            </svg>
+          `),
+          scaledSize: new window.google.maps.Size(24, 24),
+          anchor: new window.google.maps.Point(12, 12)
+        });
+      });
 
-              markersRef.current.push(marker);
-            }
-          }
-        );
-      }, index * 150); // 150ms delay between each request
+      markersRef.current.push(marker);
     });
   };
 
@@ -216,8 +198,8 @@ const Map = forwardRef(({ apiKey, onPlaceClick, onMapClick, selectedLocation, se
       addSelectedLocationMarker(selectedLocation);
     }
     
-    if (searchResults && searchResults.length > 0) {
-      addSearchResultMarkers(searchResults);
+    if (searchResultsData && searchResultsData.length > 0) {
+      addSearchResultMarkers(searchResultsData);
       // Enable traffic layer when showing search results
       if (mapInstance.current && window.google?.maps) {
         if (!trafficLayerRef.current) {
@@ -226,7 +208,7 @@ const Map = forwardRef(({ apiKey, onPlaceClick, onMapClick, selectedLocation, se
         trafficLayerRef.current.setMap(mapInstance.current);
       }
     }
-  }, [selectedLocation, searchResults]);
+  }, [selectedLocation, searchResultsData]);
 
   const handleMapClick = async (event) => {
     const lat = event.detail.latLng.lat;
