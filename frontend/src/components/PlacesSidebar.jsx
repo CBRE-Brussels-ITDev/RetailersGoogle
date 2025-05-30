@@ -56,11 +56,11 @@ const PlacesSidebar = ({ visible, places, onPlaceClick, onClose, selectedLocatio
           if (!selectedLocation) return 0;
           const distA = calculateDistance(
             selectedLocation.lat, selectedLocation.lng,
-            a.coordinates.lat, a.coordinates.lng
+            a.geometry.location.lat, a.geometry.location.lng
           );
           const distB = calculateDistance(
             selectedLocation.lat, selectedLocation.lng,
-            b.coordinates.lat, b.coordinates.lng
+            b.geometry.location.lat, b.geometry.location.lng
           );
           return distA - distB;
         case 'type':
@@ -75,7 +75,6 @@ const PlacesSidebar = ({ visible, places, onPlaceClick, onClose, selectedLocatio
 
   // Format distance
   const formatDistance = (place) => {
-    console.log('Calculating distance for place:', place);
     if (!selectedLocation) return '';
     const distance = calculateDistance(
       selectedLocation.lat, selectedLocation.lng,
@@ -266,11 +265,12 @@ const styles = {
     width: '400px',
     height: '100vh',
     backgroundColor: 'white',
-    borderRight: '1px solid #e0e0e0',
+    borderLeft: '1px solid #e0e0e0', // Changed from borderRight to borderLeft
     display: 'flex',
     flexDirection: 'column',
     fontFamily: 'Arial, sans-serif',
-    zIndex: 1000
+    zIndex: 1000,
+    position: 'relative'
   },
   header: {
     padding: '15px 20px',

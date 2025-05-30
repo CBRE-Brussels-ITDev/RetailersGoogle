@@ -84,16 +84,6 @@ function App() {
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw', display: 'flex' }}>
-      {/* Sidebar */}
-      <PlacesSidebar
-        visible={sidebarVisible}
-        places={searchResultsData}
-        onPlaceClick={handlePlaceClick}
-        onClose={() => setSidebarVisible(false)}
-        selectedLocation={selectedLocation}
-        isLoading={isLoading}
-      />
-
       {/* Map Container */}
       <div style={{ 
         flex: 1, 
@@ -111,6 +101,16 @@ function App() {
           style={{ width: '100%', height: '100%' }}
         />
       </div>
+
+      {/* Sidebar - Right Side */}
+      <PlacesSidebar
+        visible={sidebarVisible}
+        places={searchResultsData}
+        onPlaceClick={handlePlaceClick}
+        onClose={() => setSidebarVisible(false)}
+        selectedLocation={selectedLocation}
+        isLoading={isLoading}
+      />
 
       {/* Search Panel */}
       <SearchPanel 
