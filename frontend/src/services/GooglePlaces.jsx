@@ -1,8 +1,10 @@
+// Updated src/services/GooglePlaces.jsx
 import axios from 'axios';
 
 const BASE_URL = 'http://localhost:5001';
 
 const GooglePlacesService = {
+    // Existing methods...
     async getPlacesInRadius(lat, lng, radius, category = null, getAllSectors = false) {
         console.log('Fetching places in radius:', { lat, lng, radius, category, getAllSectors });
         try {
@@ -12,13 +14,11 @@ const GooglePlacesService = {
                 radius,
             };
 
-            // Add appropriate parameters based on search type
             if (getAllSectors) {
                 requestBody.getAllSectors = true;
             } else if (category) {
                 requestBody.category = category;
             } else {
-                // Default to getting all sectors if no category specified
                 requestBody.getAllSectors = true;
             }
 
@@ -38,29 +38,6 @@ const GooglePlacesService = {
         }
     },
 
-    async getPlacesTextSearch(lat, lng, radius, query = '') {
-        console.log('Fetching places via text search:', { lat, lng, radius, query });
-        try {
-            const response = await axios.post(`${BASE_URL}/get-all-places-text-search`, {
-                lat,
-                lng,
-                radius,
-                query
-            });
-            
-            console.log('Text search response:', response.data);
-            return {
-                placeIds: response.data.placeIds || [],
-                places: response.data.places || [],
-                totalFound: response.data.totalFound || 0,
-                searchParams: response.data.searchParams || {}
-            };
-        } catch (error) {
-            console.error('Error fetching places via text search:', error);
-            throw error;
-        }
-    },
-
     async getPlaceDetails(placeId) {
         console.log('Fetching place details for:', placeId);
         try {
@@ -72,7 +49,75 @@ const GooglePlacesService = {
         }
     },
 
-    // Helper method to get places with different search strategies
+    // NEW: Catchment calculation method
+    async calculateCatchment(lat, lng, distances, departTime, travelMode) {
+        console.log('Calculating catchment:', { lat, lng, distances, departTime, travelMode });
+        try {
+            const response = await axios.post(`${BASE_URL}/calculate-catchment`, {
+                lat,
+                lng,
+                distances,
+                departTime,
+                travelMode
+            });
+            
+            console.log('Catchment response:', response.data);
+            return {
+                catchmentResults: response.data.catchmentResults || [],
+                searchParams: response.data.searchParams || {}
+            };
+        } catch (error) {
+            console.error('Error calculating catchment:', error);
+            throw error;
+        }
+    },
+
+    // NEW: Get demographic data for a specific area
+    async getDemographicData(geometry) {
+        console.log('Fetching demographic data for geometry:', geometry);
+        try {
+            const response = await axios.post(`${BASE_URL}/get-demographic-data`, {
+                geometry
+            });
+            
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching demographic data:', error);
+            throw error;
+        }
+    },
+
+    // NEW: Generate PDF report
+    async generateCatchmentReport(catchmentData, address, imageUrl) {
+        console.log('Generating catchment report:', { catchmentData, address });
+        try {
+            const response = await axios.post(`${BASE_URL}/generate-catchment-report`, {
+                catchmentData,
+                address,
+                imageUrl,
+                timestamp: new Date().toISOString()
+            }, {
+                responseType: 'blob' // Important for PDF download
+            });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `CBRE_Catchment_${Date.now()}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error generating report:', error);
+            throw error;
+        }
+    },
+
+    // Helper method for existing search functionality
     async searchPlaces(lat, lng, radius, options = {}) {
         const { 
             category = null, 

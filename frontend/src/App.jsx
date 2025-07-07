@@ -3,19 +3,34 @@ import './index.css';
 import Map from './components/Map';
 import Modal from './components/Modal';
 import SearchPanel from './components/SearchPanel';
-import PlacesSidebar from './components/PlacesSidebar';
+import CatchmentSidebar from './components/CatchmentSidebar'; // New enhanced sidebar
+import CatchmentAnalysis from './components/CatchmentAnalysis'; // New catchment component
 import GooglePlacesService from './services/GooglePlaces';
 
 function App() {
   const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const mapRef = useRef(null);
+  
+  // Existing state
   const [placeDetails, setPlaceDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchResultsData, setSearchResultsData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true); // Changed to true by default
+  
+  // New catchment-related state
+  const [currentLayer, setCurrentLayer] = useState('catchment'); // 'catchment' or 'commune'
+  const [showCatchmentMode, setShowCatchmentMode] = useState(false);
+  const [catchmentData, setCatchmentData] = useState([]);
+  
+  // Mock user data - replace with actual authentication
+  const [user] = useState({
+    firstName: 'John',
+    lastName: 'Doe',
+    location: 'Brussels, Belgium'
+  });
 
   const handlePlaceClick = async (placeId) => {
     try {
@@ -45,16 +60,14 @@ function App() {
       
       let results;
       if (searchParams.getAllSectors) {
-        // Search for all sectors
         results = await GooglePlacesService.getPlacesInRadius(
           selectedLocation.lat,
           selectedLocation.lng,
           searchParams.radius,
-          null, // No specific category
-          true // getAllSectors = true
+          null,
+          true
         );
       } else {
-        // Search for specific category
         results = await GooglePlacesService.getPlacesInRadius(
           selectedLocation.lat,
           selectedLocation.lng,
@@ -65,15 +78,13 @@ function App() {
 
       setSearchResults(results.placeIds || []);
       setSearchResultsData(results.places || []);
-      setSidebarVisible(true); // Show sidebar when results are found
+      setSidebarVisible(true);
       
-      // Add circle to map to show search area
       if (mapRef.current) {
         mapRef.current.addCircle(selectedLocation, searchParams.radius);
       }
 
       console.log('Search results:', results);
-      console.log(`Found ${results.totalFound} places with coordinates`);
     } catch (error) {
       console.error('Error searching places:', error);
       alert('Error searching places. Please try again.');
@@ -82,13 +93,49 @@ function App() {
     }
   };
 
+  const handleBasemapChange = (basemapType) => {
+    console.log('Changing basemap to:', basemapType);
+    // Implement basemap change logic for Google Maps
+    // This would need to be implemented in your Map component
+    if (mapRef.current && mapRef.current.changeBasemap) {
+      mapRef.current.changeBasemap(basemapType);
+    }
+  };
+
+  const handleLayerChange = () => {
+    setCurrentLayer(prev => prev === 'catchment' ? 'commune' : 'catchment');
+  };
+
+  const toggleCatchmentMode = () => {
+    setShowCatchmentMode(prev => !prev);
+    // Clear existing data when switching modes
+    if (!showCatchmentMode) {
+      setSearchResults([]);
+      setSearchResultsData([]);
+    }
+  };
+
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw', display: 'flex' }}>
+      {/* Enhanced Sidebar */}
+      <CatchmentSidebar
+        visible={sidebarVisible}
+        places={searchResultsData}
+        onPlaceClick={handlePlaceClick}
+        onClose={() => setSidebarVisible(false)}
+        selectedLocation={selectedLocation}
+        isLoading={isLoading}
+        onBasemapChange={handleBasemapChange}
+        currentLayer={currentLayer}
+        user={user}
+      />
+
       {/* Map Container */}
       <div style={{ 
         flex: 1, 
-        width: sidebarVisible ? 'calc(100% - 400px)' : '100%',
-        transition: 'width 0.3s ease'
+        width: sidebarVisible ? 'calc(100% - 320px)' : '100%',
+        transition: 'width 0.3s ease',
+        position: 'relative'
       }}>
         <Map
           apiKey={API_KEY}
@@ -100,26 +147,47 @@ function App() {
           searchResultsData={searchResultsData}
           style={{ width: '100%', height: '100%' }}
         />
+
+        {/* Mode Toggle Button */}
+        <button
+          onClick={toggleCatchmentMode}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            padding: '10px 20px',
+            backgroundColor: showCatchmentMode ? '#dc3545' : '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            zIndex: 1001,
+            fontSize: '14px',
+            fontWeight: '600'
+          }}
+        >
+          {showCatchmentMode ? 'Exit Catchment Mode' : 'Enable Catchment Mode'}
+        </button>
+
+        {/* Conditional rendering based on mode */}
+        {showCatchmentMode ? (
+          // Catchment Analysis Mode
+          <CatchmentAnalysis
+            map={mapRef.current}
+            selectedLocation={selectedLocation}
+            onLocationSelect={handleMapClick}
+          />
+        ) : (
+          // Regular Places Search Mode
+          <SearchPanel 
+            onSearch={handleSearch}
+            isLoading={isLoading}
+            selectedLocation={selectedLocation}
+            resultsCount={searchResults.length}
+            mapRef={mapRef}
+          />
+        )}
       </div>
-
-      {/* Sidebar - Right Side */}
-      <PlacesSidebar
-        visible={sidebarVisible}
-        places={searchResultsData}
-        onPlaceClick={handlePlaceClick}
-        onClose={() => setSidebarVisible(false)}
-        selectedLocation={selectedLocation}
-        isLoading={isLoading}
-      />
-
-      {/* Search Panel */}
-      <SearchPanel 
-        onSearch={handleSearch}
-        isLoading={isLoading}
-        selectedLocation={selectedLocation}
-        resultsCount={searchResults.length}
-        mapRef={mapRef}
-      />
 
       {/* Modal */}
       <Modal
