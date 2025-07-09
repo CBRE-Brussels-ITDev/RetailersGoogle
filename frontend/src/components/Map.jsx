@@ -1,268 +1,399 @@
 import React, { useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
-import { APIProvider, Map as GoogleMap } from '@vis.gl/react-google-maps';
+import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 
-const Map = forwardRef(({ apiKey, onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData }, ref) => {
-  const mapInstance = useRef(null);
-  const circleRef = useRef(null);
-  const markersRef = useRef([]);
-  const placeCirclesRef = useRef([]);
-  const trafficLayerRef = useRef(null);
+const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData }, ref) => {
+  const mapDiv = useRef(null);
+  const mapView = useRef(null);
+  const graphicsLayer = useRef(null);
+  const circleGraphic = useRef(null);
+  const markersGraphics = useRef([]);
+  const trafficLayer = useRef(null);
+
+  // Initialize ArcGIS modules
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeMap = async () => {
+      try {
+        const [
+          Map,
+          MapView,
+          GraphicsLayer,
+          Graphic,
+          Point,
+          Polygon,
+          SimpleMarkerSymbol,
+          SimpleFillSymbol,
+          SimpleLineSymbol,
+          TextSymbol,
+          PictureMarkerSymbol
+        ] = await Promise.all([
+          import('@arcgis/core/Map'),
+          import('@arcgis/core/views/MapView'),
+          import('@arcgis/core/layers/GraphicsLayer'),
+          import('@arcgis/core/Graphic'),
+          import('@arcgis/core/geometry/Point'),
+          import('@arcgis/core/geometry/Polygon'),
+          import('@arcgis/core/symbols/SimpleMarkerSymbol'),
+          import('@arcgis/core/symbols/SimpleFillSymbol'),
+          import('@arcgis/core/symbols/SimpleLineSymbol'),
+          import('@arcgis/core/symbols/TextSymbol'),
+          import('@arcgis/core/symbols/PictureMarkerSymbol')
+        ]);
+
+        if (!mounted) return;
+
+        // Create graphics layer
+        graphicsLayer.current = new GraphicsLayer.default();
+
+        // Create map
+        const map = new Map.default({
+          basemap: 'gray-vector', // Default to light gray basemap
+          layers: [graphicsLayer.current]
+        });
+
+        // Create map view
+        mapView.current = new MapView.default({
+          container: mapDiv.current,
+          map: map,
+          center: [4.3517, 50.8503], // Brussels coordinates [lng, lat]
+          zoom: 10,
+          ui: {
+            components: ["attribution"]
+          }
+        });
+
+        // Handle map clicks
+        mapView.current.on('click', (event) => {
+          const { longitude, latitude } = event.mapPoint;
+          
+          // Check if we clicked on a marker
+          mapView.current.hitTest(event).then((response) => {
+            if (response.results.length > 0) {
+              const graphic = response.results[0].graphic;
+              if (graphic.attributes && graphic.attributes.place_id && onPlaceClick) {
+                onPlaceClick(graphic.attributes.place_id);
+                return;
+              }
+            }
+            
+            // If no marker was clicked, treat as map click
+            // Clear existing circle when new location is selected
+            if (circleGraphic.current) {
+              graphicsLayer.current.remove(circleGraphic.current);
+              circleGraphic.current = null;
+            }
+
+            if (onMapClick) {
+              onMapClick(latitude, longitude);
+            }
+          });
+        });
+
+        console.log('ArcGIS Map initialized successfully');
+
+      } catch (error) {
+        console.error('Error initializing ArcGIS Map:', error);
+      }
+    };
+
+    initializeMap();
+
+    return () => {
+      mounted = false;
+      if (mapView.current) {
+        mapView.current.destroy();
+      }
+    };
+  }, [onMapClick]);
 
   // Expose methods to the parent component
   useImperativeHandle(ref, () => ({
-    addCircle(center, radius) {
-      // Remove existing circle
-      if (circleRef.current) {
-        circleRef.current.setMap(null);
-      }
+    async addCircle(center, radius) {
+      if (!mapView.current || !graphicsLayer.current) return;
 
-      // Add new circle if map is available
-      if (mapInstance.current && window.google?.maps) {
-        circleRef.current = new window.google.maps.Circle({
-          strokeColor: '#FF0000',
-          strokeOpacity: 0.8,
-          strokeWeight: 2,
-          fillColor: '#FF0000',
-          fillOpacity: 0.15,
-          map: mapInstance.current,
-          center,
-          radius,
+      try {
+        const [Graphic, Point, Polygon, SimpleFillSymbol, SimpleLineSymbol] = await Promise.all([
+          import('@arcgis/core/Graphic'),
+          import('@arcgis/core/geometry/Point'),
+          import('@arcgis/core/geometry/Polygon'),
+          import('@arcgis/core/symbols/SimpleFillSymbol'),
+          import('@arcgis/core/symbols/SimpleLineSymbol')
+        ]);
+
+        // Remove existing circle
+        if (circleGraphic.current) {
+          graphicsLayer.current.remove(circleGraphic.current);
+        }
+
+        // Create circle geometry (approximation using polygon)
+        const centerPoint = new Point.default({
+          longitude: center.lng,
+          latitude: center.lat,
+          spatialReference: mapView.current.spatialReference
         });
+
+        // Create circle polygon
+        const circle = await createCirclePolygon(centerPoint, radius);
+
+        // Create circle symbol
+        const circleSymbol = new SimpleFillSymbol.default({
+          color: [255, 0, 0, 0.15],
+          outline: new SimpleLineSymbol.default({
+            color: [255, 0, 0, 0.8],
+            width: 2
+          })
+        });
+
+        // Create circle graphic
+        circleGraphic.current = new Graphic.default({
+          geometry: circle,
+          symbol: circleSymbol
+        });
+
+        graphicsLayer.current.add(circleGraphic.current);
+
+      } catch (error) {
+        console.error('Error adding circle:', error);
       }
     },
+
     clearCircle() {
-      if (circleRef.current) {
-        circleRef.current.setMap(null);
-        circleRef.current = null;
+      if (circleGraphic.current && graphicsLayer.current) {
+        graphicsLayer.current.remove(circleGraphic.current);
+        circleGraphic.current = null;
       }
     },
-    toggleTraffic(show = true) {
-      if (!mapInstance.current || !window.google?.maps) return;
-      
-      if (show) {
-        if (!trafficLayerRef.current) {
-          trafficLayerRef.current = new window.google.maps.TrafficLayer();
-        }
-        trafficLayerRef.current.setMap(mapInstance.current);
-      } else {
-        if (trafficLayerRef.current) {
-          trafficLayerRef.current.setMap(null);
-        }
-      }
+
+    async toggleTraffic(show = true) {
+      // Note: Traffic layer implementation would require additional ArcGIS services
+      // This is a placeholder for traffic functionality
+      console.log('Traffic toggle:', show);
     }
   }));
 
-  // Clear all markers and their circles
-  const clearMarkers = () => {
-    markersRef.current.forEach(marker => {
-      marker.setMap(null);
-    });
-    markersRef.current = [];
+  // Helper function to create circle polygon
+  const createCirclePolygon = async (centerPoint, radiusMeters) => {
+    const [Polygon, Point] = await Promise.all([
+      import('@arcgis/core/geometry/Polygon'),
+      import('@arcgis/core/geometry/Point')
+    ]);
+
+    const points = [];
+    const numberOfPoints = 60;
     
-    // Clear place circles
-    placeCirclesRef.current.forEach(circle => {
-      circle.setMap(null);
+    // Convert radius from meters to degrees (approximate)
+    const radiusDegrees = radiusMeters / 111320; // roughly 111,320 meters per degree
+
+    for (let i = 0; i < numberOfPoints; i++) {
+      const angle = (i / numberOfPoints) * 2 * Math.PI;
+      const x = centerPoint.longitude + radiusDegrees * Math.cos(angle);
+      const y = centerPoint.latitude + radiusDegrees * Math.sin(angle);
+      points.push([x, y]);
+    }
+    
+    // Close the polygon
+    points.push(points[0]);
+
+    return new Polygon.default({
+      rings: [points],
+      spatialReference: centerPoint.spatialReference
     });
-    placeCirclesRef.current = [];
   };
 
-  // Add circle around a place marker
-  const addPlaceCircle = (center, radius = 100, color = '#4CAF50') => {
-    if (mapInstance.current && window.google?.maps) {
-      const circle = new window.google.maps.Circle({
-        strokeColor: color,
-        strokeOpacity: 0.6,
-        strokeWeight: 1,
-        fillColor: color,
-        fillOpacity: 0.1,
-        map: mapInstance.current,
-        center,
-        radius,
+  // Clear all markers
+  const clearMarkers = () => {
+    if (graphicsLayer.current && markersGraphics.current.length > 0) {
+      markersGraphics.current.forEach(graphic => {
+        graphicsLayer.current.remove(graphic);
       });
-      placeCirclesRef.current.push(circle);
-      return circle;
+      markersGraphics.current = [];
     }
-    return null;
   };
 
   // Add marker for selected location
-  const addSelectedLocationMarker = (location) => {
-    if (mapInstance.current && window.google?.maps) {
-      const marker = new window.google.maps.Marker({
-        position: location,
-        map: mapInstance.current,
-        title: 'Selected Location',
-        icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-              <circle cx="16" cy="16" r="12" fill="#007bff" stroke="white" stroke-width="3"/>
-              <circle cx="16" cy="16" r="6" fill="white" opacity="0.8"/>
-            </svg>
-          `),
-          scaledSize: new window.google.maps.Size(32, 32),
-          anchor: new window.google.maps.Point(16, 16)
+  const addSelectedLocationMarker = async (location) => {
+    if (!mapView.current || !graphicsLayer.current) return;
+
+    try {
+      const [Graphic, Point, SimpleMarkerSymbol] = await Promise.all([
+        import('@arcgis/core/Graphic'),
+        import('@arcgis/core/geometry/Point'),
+        import('@arcgis/core/symbols/SimpleMarkerSymbol')
+      ]);
+
+      const point = new Point.default({
+        longitude: location.lng,
+        latitude: location.lat,
+        spatialReference: mapView.current.spatialReference
+      });
+
+      const markerSymbol = new SimpleMarkerSymbol.default({
+        color: [0, 123, 255, 1],
+        outline: {
+          color: [255, 255, 255, 1],
+          width: 3
+        },
+        size: 16
+      });
+
+      const graphic = new Graphic.default({
+        geometry: point,
+        symbol: markerSymbol,
+        attributes: {
+          type: 'selected-location',
+          title: 'Selected Location'
         }
       });
-      
-      // Add a larger circle around the selected location
-      addPlaceCircle(location, 200, '#007bff');
-      
-      markersRef.current.push(marker);
+
+      graphicsLayer.current.add(graphic);
+      markersGraphics.current.push(graphic);
+
+    } catch (error) {
+      console.error('Error adding selected location marker:', error);
     }
   };
 
-  // Add markers for search results using coordinates from backend
-  const addSearchResultMarkers = (placesData) => {
-    if (!mapInstance.current || !window.google?.maps || !placesData?.length) return;
+  // Add markers for search results
+  const addSearchResultMarkers = async (placesData) => {
+    if (!mapView.current || !graphicsLayer.current || !placesData?.length) return;
 
-    // Colors for different place types
-    const placeColors = [
-      '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7',
-      '#fd79a8', '#6c5ce7', '#a29bfe', '#fd7f6f', '#7bed9f'
-    ];
-    
-    placesData.forEach((place, index) => {
-      const position = place.coordinates;
-      
-      // Get color based on place type or use cycling colors
-      const colorIndex = index % placeColors.length;
-      const markerColor = placeColors[colorIndex];
-      
-      // Create enhanced marker with rating info
-      const marker = new window.google.maps.Marker({
-        position: position,
-        map: mapInstance.current,
-        title: `${place.name || 'Place'}${place.rating ? ` (⭐${place.rating})` : ''}${place.search_type ? ` [${place.search_type}]` : ''}`,
-        icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" fill="${markerColor}" stroke="white" stroke-width="2"/>
-              <circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/>
-              ${place.rating ? `<text x="12" y="16" text-anchor="middle" font-size="8" fill="black">★</text>` : ''}
-            </svg>
-          `),
-          scaledSize: new window.google.maps.Size(24, 24),
-          anchor: new window.google.maps.Point(12, 12)
-        }
-      });
+    try {
+      const [Graphic, Point, SimpleMarkerSymbol, TextSymbol] = await Promise.all([
+        import('@arcgis/core/Graphic'),
+        import('@arcgis/core/geometry/Point'),
+        import('@arcgis/core/symbols/SimpleMarkerSymbol'),
+        import('@arcgis/core/symbols/TextSymbol')
+      ]);
 
-      // Add circle around each place
-      const circleRadius = place.rating ? Math.max(50, place.rating * 20) : 75;
-      addPlaceCircle(position, circleRadius, markerColor);
-
-      // Add click listener
-      marker.addListener('click', () => {
-        if (onPlaceClick) {
-          onPlaceClick(place.place_id);
-        }
-      });
-
-      // Add hover effects
-      marker.addListener('mouseover', () => {
-        marker.setIcon({
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-              <circle cx="14" cy="14" r="12" fill="${markerColor}" stroke="white" stroke-width="3"/>
-              <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
-              ${place.rating ? `<text x="14" y="18" text-anchor="middle" font-size="10" fill="black">★</text>` : ''}
-            </svg>
-          `),
-          scaledSize: new window.google.maps.Size(28, 28),
-          anchor: new window.google.maps.Point(14, 14)
+      for (let i = 0; i < placesData.length; i++) {
+        const place = placesData[i];
+        const position = place.coordinates;
+        
+        // Get category color and emoji
+        const markerColor = getCategoryColor(place.search_type);
+        const emoji = getCategoryEmoji(place.search_type);
+        
+        const point = new Point.default({
+          longitude: position.lng,
+          latitude: position.lat,
+          spatialReference: mapView.current.spatialReference
         });
-      });
 
-      marker.addListener('mouseout', () => {
-        marker.setIcon({
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" fill="${markerColor}" stroke="white" stroke-width="2"/>
-              <circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/>
-              ${place.rating ? `<text x="12" y="16" text-anchor="middle" font-size="8" fill="black">★</text>` : ''}
-            </svg>
-          `),
-          scaledSize: new window.google.maps.Size(24, 24),
-          anchor: new window.google.maps.Point(12, 12)
+        // Create marker symbol with category color
+        const markerSymbol = new SimpleMarkerSymbol.default({
+          color: hexToRgb(markerColor).concat([1]),
+          outline: {
+            color: [255, 255, 255, 1],
+            width: 2
+          },
+          size: place.rating ? Math.max(12, place.rating * 3) : 12
         });
-      });
 
-      markersRef.current.push(marker);
-    });
+        // Create text symbol for emoji
+        const textSymbol = new TextSymbol.default({
+          text: emoji,
+          color: "white",
+          haloColor: "black",
+          haloSize: 1,
+          font: {
+            size: 10,
+            family: "Arial"
+          }
+        });
+
+        // Create main marker graphic
+        const markerGraphic = new Graphic.default({
+          geometry: point,
+          symbol: markerSymbol,
+          attributes: {
+            place_id: place.place_id,
+            name: place.name,
+            type: place.search_type,
+            rating: place.rating,
+            title: `${place.name || 'Place'}${place.rating ? ` (⭐${place.rating})` : ''}${place.search_type ? ` [${place.search_type}]` : ''}`
+          }
+        });
+
+        // Create text graphic for emoji overlay
+        const textGraphic = new Graphic.default({
+          geometry: point,
+          symbol: textSymbol
+        });
+
+        graphicsLayer.current.add(markerGraphic);
+        graphicsLayer.current.add(textGraphic);
+        markersGraphics.current.push(markerGraphic, textGraphic);
+      }
+
+    } catch (error) {
+      console.error('Error adding search result markers:', error);
+    }
+  };
+
+  // Helper function to convert hex to RGB
+  const hexToRgb = (hex) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? [
+      parseInt(result[1], 16),
+      parseInt(result[2], 16),
+      parseInt(result[3], 16)
+    ] : [127, 140, 141]; // Default gray
   };
 
   // Update markers when data changes
   useEffect(() => {
-    clearMarkers();
-    
-    if (selectedLocation) {
-      addSelectedLocationMarker(selectedLocation);
-    }
-    
-    if (searchResultsData && searchResultsData.length > 0) {
-      addSearchResultMarkers(searchResultsData);
-      // Enable traffic layer when showing search results
-      if (mapInstance.current && window.google?.maps) {
-        if (!trafficLayerRef.current) {
-          trafficLayerRef.current = new window.google.maps.TrafficLayer();
-        }
-        trafficLayerRef.current.setMap(mapInstance.current);
+    const updateMarkers = async () => {
+      clearMarkers();
+      
+      if (selectedLocation) {
+        await addSelectedLocationMarker(selectedLocation);
       }
-    }
-  }, [selectedLocation, searchResultsData]);
-
-  const handleMapClick = async (event) => {
-    const lat = event.detail.latLng.lat;
-    const lng = event.detail.latLng.lng;
-    
-    // Clear existing circle when new location is selected
-    if (circleRef.current) {
-      circleRef.current.setMap(null);
-      circleRef.current = null;
-    }
-
-    // Call the map click handler
-    if (onMapClick) {
-      onMapClick(lat, lng);
-    }
-
-    // Handle place clicks if there's a placeId
-    try {
-      const placeId = event.detail.placeId;
-      if (placeId && onPlaceClick) {
-        onPlaceClick(placeId);
+      
+      if (searchResultsData && searchResultsData.length > 0) {
+        await addSearchResultMarkers(searchResultsData);
       }
-    } catch (error) {
-      console.error('Error handling place click:', error);
-    }
-  };
+    };
 
-  // Clear markers and circle when component unmounts
+    updateMarkers();
+  }, [selectedLocation, searchResultsData, onPlaceClick]);
+
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       clearMarkers();
-      if (circleRef.current) {
-        circleRef.current.setMap(null);
-      }
-      if (trafficLayerRef.current) {
-        trafficLayerRef.current.setMap(null);
+      if (circleGraphic.current && graphicsLayer.current) {
+        graphicsLayer.current.remove(circleGraphic.current);
       }
     };
   }, []);
 
   return (
-    <APIProvider apiKey={apiKey} libraries={['places']}>
-      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <GoogleMap
-          ref={(map) => (mapInstance.current = map)}
-          style={{ width: '100%', height: '100%' }}
-          defaultCenter={{ lat: 50.8503, lng: 4.3517 }}
-          defaultZoom={8}
-          gestureHandling="greedy"
-          disableDefaultUI={true}
-          onClick={handleMapClick}
-        />
+    <div 
+      ref={mapDiv} 
+      style={{ 
+        width: '100%', 
+        height: '100%',
+        position: 'relative'
+      }}
+    >
+      {/* Loading indicator */}
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 1000,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        color: 'white',
+        padding: '20px',
+        borderRadius: '8px',
+        fontSize: '14px',
+        display: mapView.current ? 'none' : 'block'
+      }}>
+        Loading ArcGIS Map...
       </div>
-    </APIProvider>
+    </div>
   );
 });
 

@@ -1,43 +1,34 @@
 import React, { useRef, useState } from 'react';
 import './index.css';
 import Map from './components/Map';
-import Modal from './components/Modal';
-import SearchPanel from './components/SearchPanel';
-import CatchmentSidebar from './components/CatchmentSidebar'; // New enhanced sidebar
-import CatchmentAnalysis from './components/CatchmentAnalysis'; // New catchment component
+import PlaceDetailsSidebar from './components/PlaceDetailsSidebar';
+import CatchmentSidebar from './components/CatchmentSidebar';
+import CatchmentAnalysis from './components/CatchmentAnalysis';
 import GooglePlacesService from './services/GooglePlaces';
 
 function App() {
-  const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const mapRef = useRef(null);
   
   // Existing state
   const [placeDetails, setPlaceDetails] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPlaceDetailsSidebarOpen, setIsPlaceDetailsSidebarOpen] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchResultsData, setSearchResultsData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
-  const [sidebarVisible, setSidebarVisible] = useState(true); // Changed to true by default
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true);
   
   // New catchment-related state
-  const [currentLayer, setCurrentLayer] = useState('catchment'); // 'catchment' or 'commune'
+  const [currentLayer, setCurrentLayer] = useState('catchment');
   const [showCatchmentMode, setShowCatchmentMode] = useState(false);
   const [catchmentData, setCatchmentData] = useState([]);
-  
-  // Mock user data - replace with actual authentication
-  const [user] = useState({
-    firstName: 'John',
-    lastName: 'Doe',
-    location: 'Brussels, Belgium'
-  });
 
   const handlePlaceClick = async (placeId) => {
     try {
       const response = await GooglePlacesService.getPlaceDetails(placeId);
       console.log('Place Details Response:', response);
       setPlaceDetails(response);
-      setIsModalOpen(true);
+      setIsPlaceDetailsSidebarOpen(true);
     } catch (error) {
       console.error('Error fetching place details:', error);
     }
@@ -46,6 +37,15 @@ function App() {
   const handleMapClick = (lat, lng) => {
     setSelectedLocation({ lat, lng });
     console.log('Map clicked at:', { lat, lng });
+    
+    // Clear search results when new location is selected
+    setSearchResults([]);
+    setSearchResultsData([]);
+    
+    // Clear existing circle when new location is selected
+    if (mapRef.current) {
+      mapRef.current.clearCircle();
+    }
   };
 
   const handleSearch = async (searchParams) => {
@@ -78,7 +78,7 @@ function App() {
 
       setSearchResults(results.placeIds || []);
       setSearchResultsData(results.places || []);
-      setSidebarVisible(true);
+      setLeftSidebarVisible(true);
       
       if (mapRef.current) {
         mapRef.current.addCircle(selectedLocation, searchParams.radius);
@@ -93,15 +93,6 @@ function App() {
     }
   };
 
-  const handleBasemapChange = (basemapType) => {
-    console.log('Changing basemap to:', basemapType);
-    // Implement basemap change logic for Google Maps
-    // This would need to be implemented in your Map component
-    if (mapRef.current && mapRef.current.changeBasemap) {
-      mapRef.current.changeBasemap(basemapType);
-    }
-  };
-
   const handleLayerChange = () => {
     setCurrentLayer(prev => prev === 'catchment' ? 'commune' : 'catchment');
   };
@@ -112,33 +103,46 @@ function App() {
     if (!showCatchmentMode) {
       setSearchResults([]);
       setSearchResultsData([]);
+      if (mapRef.current) {
+        mapRef.current.clearCircle();
+      }
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchResults([]);
+    setSearchResultsData([]);
+    setSelectedLocation(null);
+    if (mapRef.current) {
+      mapRef.current.clearCircle();
     }
   };
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw', display: 'flex' }}>
-      {/* Enhanced Sidebar */}
+      {/* Left Sidebar */}
       <CatchmentSidebar
-        visible={sidebarVisible}
+        visible={leftSidebarVisible}
         places={searchResultsData}
         onPlaceClick={handlePlaceClick}
-        onClose={() => setSidebarVisible(false)}
+        onClose={() => setLeftSidebarVisible(false)}
         selectedLocation={selectedLocation}
         isLoading={isLoading}
-        onBasemapChange={handleBasemapChange}
         currentLayer={currentLayer}
-        user={user}
+        onSearch={handleSearch}
+        resultsCount={searchResults.length}
       />
 
       {/* Map Container */}
       <div style={{ 
         flex: 1, 
-        width: sidebarVisible ? 'calc(100% - 320px)' : '100%',
-        transition: 'width 0.3s ease',
-        position: 'relative'
+        width: 'auto',
+        position: 'relative',
+        marginLeft: leftSidebarVisible ? '350px' : '0',
+        marginRight: isPlaceDetailsSidebarOpen ? '400px' : '0',
+        transition: 'all 0.3s ease'
       }}>
         <Map
-          apiKey={API_KEY}
           ref={mapRef}
           onPlaceClick={handlePlaceClick}
           onMapClick={handleMapClick}
@@ -148,55 +152,129 @@ function App() {
           style={{ width: '100%', height: '100%' }}
         />
 
-        {/* Mode Toggle Button */}
-        <button
-          onClick={toggleCatchmentMode}
-          style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            padding: '10px 20px',
-            backgroundColor: showCatchmentMode ? '#dc3545' : '#28a745',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            zIndex: 1001,
-            fontSize: '14px',
-            fontWeight: '600'
-          }}
-        >
-          {showCatchmentMode ? 'Exit Catchment Mode' : 'Enable Catchment Mode'}
-        </button>
+        {/* Control Panel */}
+        <div style={styles.controlPanel}>
+          {/* Mode Toggle Button */}
+          <button
+            onClick={toggleCatchmentMode}
+            style={{
+              ...styles.modeButton,
+              backgroundColor: showCatchmentMode ? '#dc3545' : '#28a745'
+            }}
+          >
+            {showCatchmentMode ? '🔍 Places Mode' : '📊 Catchment Mode'}
+          </button>
+
+          {/* Clear Search Button */}
+          {(searchResults.length > 0 || selectedLocation) && (
+            <button
+              onClick={clearSearch}
+              style={styles.clearButton}
+            >
+              🗑️ Clear
+            </button>
+          )}
+
+          {/* Left Sidebar Toggle */}
+          <button
+            onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
+            style={styles.sidebarToggle}
+          >
+            {leftSidebarVisible ? '◀' : '▶'} Menu
+          </button>
+        </div>
+
+        {/* Search Results Counter */}
+        {searchResultsData.length > 0 && (
+          <div style={styles.resultsCounter}>
+            <span style={styles.resultsText}>
+              📍 {searchResultsData.length} place{searchResultsData.length !== 1 ? 's' : ''} found
+            </span>
+          </div>
+        )}
 
         {/* Conditional rendering based on mode */}
-        {showCatchmentMode ? (
-          // Catchment Analysis Mode
+        {showCatchmentMode && (
           <CatchmentAnalysis
             map={mapRef.current}
             selectedLocation={selectedLocation}
             onLocationSelect={handleMapClick}
           />
-        ) : (
-          // Regular Places Search Mode
-          <SearchPanel 
-            onSearch={handleSearch}
-            isLoading={isLoading}
-            selectedLocation={selectedLocation}
-            resultsCount={searchResults.length}
-            mapRef={mapRef}
-          />
         )}
       </div>
 
-      {/* Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        data={placeDetails}
-      />
+      {/* Right Sidebar for Place Details */}
+      {isPlaceDetailsSidebarOpen && (
+        <PlaceDetailsSidebar
+          isOpen={isPlaceDetailsSidebarOpen}
+          onClose={() => setIsPlaceDetailsSidebarOpen(false)}
+          data={placeDetails}
+        />
+      )}
     </div>
   );
 }
+
+const styles = {
+  controlPanel: {
+    position: 'absolute',
+    top: '20px',
+    right: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    zIndex: 1001
+  },
+  modeButton: {
+    padding: '12px 20px',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    transition: 'all 0.2s ease',
+    minWidth: '150px'
+  },
+  clearButton: {
+    padding: '10px 16px',
+    backgroundColor: '#f39c12',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+  },
+  sidebarToggle: {
+    padding: '10px 12px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+  },
+  resultsCounter: {
+    position: 'absolute',
+    bottom: '20px',
+    right: '20px',
+    zIndex: 1000
+  },
+  resultsText: {
+    backgroundColor: 'rgba(40, 167, 69, 0.9)',
+    color: 'white',
+    padding: '8px 16px',
+    borderRadius: '20px',
+    fontSize: '13px',
+    fontWeight: '600',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+  }
+};
 
 export default App;

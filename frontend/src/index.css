@@ -34,6 +34,7 @@ h1 {
   font-size: 3.2em;
   line-height: 1.1;
 }
+
 .App {
   width: 100%;
   height: 100vh;
@@ -63,17 +64,70 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* ArcGIS Map Container */
+.esri-view {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.esri-view-surface {
+  background: transparent !important;
+}
+
+/* ArcGIS UI Components */
+.esri-widget {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif !important;
+}
+
+.esri-basemap-gallery__item-title {
+  font-size: 12px !important;
+}
+
+.esri-expand__content {
+  max-height: 400px !important;
+  overflow-y: auto !important;
+}
+
+/* Category Icons */
+.category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.category-icon.restaurant { background-color: #e74c3c; }
+.category-icon.shopping_mall { background-color: #9b59b6; }
+.category-icon.bank { background-color: #2ecc71; }
+.category-icon.gas_station { background-color: #f1c40f; color: #333; }
+.category-icon.hospital { background-color: #e74c3c; }
+.category-icon.pharmacy { background-color: #1abc9c; }
+.category-icon.school { background-color: #3498db; }
+.category-icon.park { background-color: #27ae60; }
+.category-icon.default { background-color: #7f8c8d; }
+
 /* Sidebar specific styles */
 .place-item:hover {
-  background-color: #f0f8ff !important;
-  border-color: #007bff !important;
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: #17E88F !important;
   transform: translateX(2px);
-  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(23, 232, 143, 0.2);
 }
 
 .place-item:active {
   transform: translateX(1px);
-  background-color: #e6f3ff !important;
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.basemap-option:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  transform: scale(1.02);
 }
 
 /* Spinner animation */
@@ -82,29 +136,40 @@ button:focus-visible {
   100% { transform: rotate(360deg); }
 }
 
+/* Pulse animation for category icons */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.category-icon:hover {
+  animation: pulse 0.6s ease-in-out;
+}
+
 /* Scrollbar styling for sidebar */
 .places-list::-webkit-scrollbar {
   width: 6px;
 }
 
 .places-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 
 .places-list::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
 }
 
 .places-list::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* Search input focus effect */
 input:focus, select:focus {
-  border-color: #007bff !important;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  border-color: #17E88F !important;
+  box-shadow: 0 0 0 2px rgba(23, 232, 143, 0.25);
 }
 
 /* Button hover effects */
@@ -117,6 +182,168 @@ button:active {
   transform: translateY(0);
 }
 
+/* Control panel buttons */
+.control-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.control-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Map overlay styles */
+.map-overlay {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Legend styles */
+.legend-container {
+  background: rgba(3, 40, 66, 0.9);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  padding: 15px;
+  color: white;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Loading animations */
+.loading-pulse {
+  animation: pulse 2s infinite;
+}
+
+.loading-spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid white;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+}
+
+/* Tooltip styles */
+.tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 10000;
+  transform: translateX(-50%);
+}
+
+/* Success/Error message styles */
+.message-success {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin: 10px 0;
+  font-weight: 500;
+}
+
+.message-error {
+  background: linear-gradient(135deg, #dc3545, #e74c3c);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin: 10px 0;
+  font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100% !important;
+    height: 50vh !important;
+    bottom: 0;
+    top: auto;
+  }
+  
+  .map-container {
+    width: 100% !important;
+    height: 50vh !important;
+  }
+  
+  .control-panel {
+    flex-direction: row !important;
+    top: 10px !important;
+    right: 10px !important;
+    gap: 5px !important;
+  }
+  
+  .control-button {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .basemap-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .legend-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .help-panel {
+    display: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .category-icon {
+    border-width: 3px !important;
+    box-shadow: 0 0 0 2px white !important;
+  }
+  
+  .place-item {
+    border-width: 2px !important;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark theme support */
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
@@ -128,4 +355,55 @@ button:active {
   button {
     background-color: #f9f9f9;
   }
+  
+  .map-overlay {
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+  }
+}
+
+/* Print styles */
+@media print {
+  .sidebar, .control-panel, .help-panel {
+    display: none !important;
+  }
+  
+  .map-container {
+    width: 100% !important;
+    height: 100vh !important;
+  }
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #17E88F;
+  outline-offset: 2px;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Selection styles */
+::selection {
+  background: rgba(23, 232, 143, 0.3);
+  color: inherit;
 }

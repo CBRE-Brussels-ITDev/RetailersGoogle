@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 
 const CatchmentSidebar = ({ 
   visible, 
@@ -7,47 +8,67 @@ const CatchmentSidebar = ({
   onClose, 
   selectedLocation, 
   isLoading,
-  onBasemapChange,
   currentLayer,
-  user = null 
+  onSearch,
+  resultsCount
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [filterByType, setFilterByType] = useState('all');
+  
+  // Search form state
+  const [radius, setRadius] = useState('1000');
+  const [category, setCategory] = useState('restaurant');
+  const [getAllSectors, setGetAllSectors] = useState(false);
 
-  // Basemap options
-  const basemaps = [
-    { 
-      id: 'light-gray', 
-      name: 'Light Gray Canvas', 
-      thumbnail: '/img/thumbnail1607388219207.jpeg',
-      mapType: 'arcgis-light-gray'
-    },
-    { 
-      id: 'dark-gray', 
-      name: 'Dark Gray Canvas', 
-      thumbnail: '/img/thumbnail1607387673856.jpeg',
-      mapType: 'arcgis-dark-gray'
-    },
-    { 
-      id: 'topographic', 
-      name: 'Topographic', 
-      thumbnail: '/img/thumbnail1607389112065.jpeg',
-      mapType: 'arcgis-topographic'
-    },
-    { 
-      id: 'streets', 
-      name: 'Streets', 
-      thumbnail: '/img/thumbnail1607389307240.jpeg',
-      mapType: 'arcgis-streets'
-    },
-    { 
-      id: 'streets-night', 
-      name: 'Streets Night', 
-      thumbnail: '/img/thumbnail1607388481562.jpeg',
-      mapType: 'arcgis-streets-night'
-    }
+  // Radius options
+  const radiusOptions = [
+    { value: '500', label: '500m' },
+    { value: '1000', label: '1KM' },
+    { value: '2000', label: '2KM' },
+    { value: '5000', label: '5KM' },
+    { value: '10000', label: '10KM' }
   ];
+
+  // Categories for search
+  const categories = [
+    { value: 'restaurant', label: 'Restaurant' },
+    { value: 'gas_station', label: 'Gas Station' },
+    { value: 'bank', label: 'Bank' },
+    { value: 'hospital', label: 'Hospital' },
+    { value: 'pharmacy', label: 'Pharmacy' },
+    { value: 'grocery_or_supermarket', label: 'Grocery/Supermarket' },
+    { value: 'shopping_mall', label: 'Shopping Mall' },
+    { value: 'school', label: 'School' },
+    { value: 'park', label: 'Park' },
+    { value: 'tourist_attraction', label: 'Tourist Attraction' },
+    { value: 'lodging', label: 'Lodging' },
+    { value: 'store', label: 'Store' },
+    { value: 'car_repair', label: 'Car Repair' },
+    { value: 'gym', label: 'Gym' },
+    { value: 'beauty_salon', label: 'Beauty Salon' },
+    { value: 'church', label: 'Church' },
+    { value: 'library', label: 'Library' },
+    { value: 'post_office', label: 'Post Office' },
+    { value: 'bakery', label: 'Bakery' },
+    { value: 'convenience_store', label: 'Convenience Store' },
+    { value: 'department_store', label: 'Department Store' },
+    { value: 'clothing_store', label: 'Clothing Store' },
+    { value: 'electronics_store', label: 'Electronics Store' },
+    { value: 'supermarket', label: 'Supermarket' }
+  ];
+
+  // Handle search submission
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (onSearch) {
+      onSearch({
+        radius: parseInt(radius),
+        category: getAllSectors ? null : category,
+        getAllSectors
+      });
+    }
+  };
 
   // Get unique place types for filter dropdown
   const placeTypes = React.useMemo(() => {
@@ -127,28 +148,6 @@ const CatchmentSidebar = ({
     return distance < 1000 ? `${Math.round(distance)}m` : `${(distance/1000).toFixed(1)}km`;
   };
 
-  // Get type color
-  const getTypeColor = (type) => {
-    const colors = {
-      restaurant: '#ff6b6b',
-      gas_station: '#4ecdc4',
-      bank: '#45b7d1',
-      hospital: '#96ceb4',
-      pharmacy: '#ffeaa7',
-      shopping_mall: '#fd79a8',
-      school: '#6c5ce7',
-      park: '#a29bfe',
-      store: '#fd7f6f',
-      default: '#7bed9f'
-    };
-    return colors[type] || colors.default;
-  };
-
-  const handleSignOut = () => {
-    // Implement sign out logic
-    alert('Sign out functionality would be implemented here');
-  };
-
   if (!visible) return null;
 
   return (
@@ -166,40 +165,102 @@ const CatchmentSidebar = ({
         </button>
       </div>
 
-      {/* Basemap Options */}
-      <div style={styles.basemapSection}>
-        <h5 style={styles.sectionTitle}>Basemap options:</h5>
-        {basemaps.map(basemap => (
-          <div 
-            key={basemap.id}
-            style={styles.basemapOption}
-            onClick={() => onBasemapChange(basemap.mapType)}
-          >
-            <img 
-              src={basemap.thumbnail} 
-              alt={basemap.name}
-              style={styles.basemapThumbnail}
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
-            <span style={styles.basemapName}>{basemap.name}</span>
+      {/* Search Section */}
+      <div style={styles.searchSection}>
+        <h5 style={styles.sectionTitle}>
+          🔍 Place Search
+        </h5>
+        
+        {/* Location Status */}
+        {selectedLocation ? (
+          <div style={styles.locationStatus}>
+            📍 Location: {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
           </div>
-        ))}
+        ) : (
+          <div style={styles.locationWarning}>
+            ⚠️ Click on the map to select a location
+          </div>
+        )}
+
+        {/* Search Form */}
+        <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Search Radius:</label>
+            <select
+              value={radius}
+              onChange={(e) => setRadius(e.target.value)}
+              style={styles.select}
+            >
+              {radiusOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={getAllSectors}
+                onChange={(e) => setGetAllSectors(e.target.checked)}
+                style={styles.checkbox}
+              />
+              Get All Sectors
+            </label>
+          </div>
+
+          {!getAllSectors && (
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Category:</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={styles.select}
+              >
+                {categories.map(cat => (
+                  <option key={cat.value} value={cat.value}>
+                    {getCategoryEmoji(cat.value)} {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={!selectedLocation || isLoading}
+            style={{
+              ...styles.searchButton,
+              ...((!selectedLocation || isLoading) ? styles.disabledButton : {})
+            }}
+          >
+            {isLoading ? 'Searching...' : 'Search Places'}
+          </button>
+        </form>
+
+        {/* Results Summary */}
+        {resultsCount > 0 && (
+          <div style={styles.resultsInfo}>
+            Found {resultsCount} place{resultsCount !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
 
       {/* Places Section (when places are available) */}
       {places && places.length > 0 && (
         <div style={styles.placesSection}>
           <h5 style={styles.sectionTitle}>
-            Found Places ({filteredAndSortedPlaces.length})
+            <span style={styles.placesIcon}>📍</span>
+            Places ({filteredAndSortedPlaces.length})
           </h5>
 
           {/* Controls */}
           <div style={styles.controls}>
             <input
               type="text"
-              placeholder="Search places..."
+              placeholder="Filter places..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               style={styles.searchInput}
@@ -224,7 +285,7 @@ const CatchmentSidebar = ({
               <option value="all">All Types</option>
               {placeTypes.map(type => (
                 <option key={type} value={type}>
-                  {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {getCategoryEmoji(type)} {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                 </option>
               ))}
             </select>
@@ -246,12 +307,18 @@ const CatchmentSidebar = ({
                 style={styles.placeItem}
                 onClick={() => onPlaceClick(place.place_id)}
               >
-                <div 
-                  style={{
-                    ...styles.typeIndicator,
-                    backgroundColor: getTypeColor(place.search_type)
-                  }}
-                />
+                <div style={styles.placeIconContainer}>
+                  <div 
+                    style={{
+                      ...styles.categoryIcon,
+                      backgroundColor: getCategoryColor(place.search_type)
+                    }}
+                  >
+                    <span style={styles.categoryEmoji}>
+                      {getCategoryEmoji(place.search_type)}
+                    </span>
+                  </div>
+                </div>
 
                 <div style={styles.placeInfo}>
                   <div style={styles.placeName}>
@@ -317,39 +384,45 @@ const CatchmentSidebar = ({
         </div>
       )}
 
-      {/* User Section */}
-      <div style={styles.userSection}>
-        {user ? (
-          <div style={styles.userInfo}>
-            <div style={styles.userDetails}>
-              <div style={styles.userName}>
-                <strong>{user.firstName}</strong>, {user.lastName}
+      {/* Category Legend (when places are visible) */}
+      {places && places.length > 0 && placeTypes.length > 1 && (
+        <div style={styles.legendSection}>
+          <h5 style={styles.sectionTitle}>Category Legend:</h5>
+          <div style={styles.legendGrid}>
+            {placeTypes.slice(0, 8).map(type => (
+              <div key={type} style={styles.legendItem}>
+                <div 
+                  style={{
+                    ...styles.legendIcon,
+                    backgroundColor: getCategoryColor(type)
+                  }}
+                >
+                  <span style={styles.legendEmoji}>
+                    {getCategoryEmoji(type)}
+                  </span>
+                </div>
+                <span style={styles.legendLabel}>
+                  {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </span>
               </div>
-              <div style={styles.userLocation}>
-                {user.location}
+            ))}
+            {placeTypes.length > 8 && (
+              <div style={styles.legendItem}>
+                <span style={styles.legendMore}>
+                  +{placeTypes.length - 8} more
+                </span>
               </div>
-            </div>
-            <button style={styles.signOutButton} onClick={handleSignOut}>
-              <svg width="20" height="20" fill="white" viewBox="0 0 24 24">
-                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
-              </svg>
-            </button>
+            )}
           </div>
-        ) : (
-          <div style={styles.signInPrompt}>
-            <button style={styles.signInButton}>
-              Sign In
-            </button>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
 
 const styles = {
   sidebar: {
-    width: '320px',
+    width: '350px',
     height: '100vh',
     backgroundColor: '#032842',
     color: 'white',
@@ -389,43 +462,108 @@ const styles = {
     cursor: 'pointer',
     padding: '5px'
   },
-  basemapSection: {
+  searchSection: {
     padding: '20px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.2)'
   },
   sectionTitle: {
     fontSize: '14px',
     fontWeight: '600',
     marginBottom: '15px',
-    color: 'white'
-  },
-  basemapOption: {
+    color: 'white',
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '8px 0',
-    cursor: 'pointer',
+    gap: '8px'
+  },
+  placesIcon: {
+    fontSize: '16px'
+  },
+  locationStatus: {
+    fontSize: '12px',
+    color: '#17E88F',
+    marginBottom: '15px',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(23, 232, 143, 0.1)',
     borderRadius: '4px',
+    border: '1px solid rgba(23, 232, 143, 0.3)'
+  },
+  locationWarning: {
+    fontSize: '12px',
+    color: '#f39c12',
+    marginBottom: '15px',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+    borderRadius: '4px',
+    border: '1px solid rgba(243, 156, 18, 0.3)'
+  },
+  searchForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '15px'
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '5px'
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: 'white'
+  },
+  checkboxLabel: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    cursor: 'pointer'
+  },
+  select: {
+    padding: '8px 12px',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '4px',
+    fontSize: '13px',
+    outline: 'none',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: 'white'
+  },
+  checkbox: {
+    cursor: 'pointer'
+  },
+  searchButton: {
+    padding: '12px 20px',
+    backgroundColor: '#17E88F',
+    color: '#032842',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
     transition: 'background-color 0.2s'
   },
-  basemapThumbnail: {
-    width: '40px',
-    height: '30px',
-    objectFit: 'cover',
-    borderRadius: '4px',
-    border: '1px solid rgba(255,255,255,0.2)'
+  disabledButton: {
+    backgroundColor: '#666',
+    cursor: 'not-allowed'
   },
-  basemapName: {
-    fontSize: '13px',
-    color: 'white'
+  resultsInfo: {
+    fontSize: '12px',
+    color: '#17E88F',
+    fontWeight: 'bold',
+    marginTop: '10px',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(23, 232, 143, 0.1)',
+    borderRadius: '4px',
+    textAlign: 'center'
   },
   placesSection: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    padding: '20px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    padding: '20px'
   },
   controls: {
     display: 'flex',
@@ -437,16 +575,7 @@ const styles = {
     padding: '8px 12px',
     border: '1px solid rgba(255,255,255,0.3)',
     borderRadius: '4px',
-    fontSize: '14px',
-    outline: 'none',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    color: 'white'
-  },
-  select: {
-    padding: '8px 12px',
-    border: '1px solid rgba(255,255,255,0.3)',
-    borderRadius: '4px',
-    fontSize: '14px',
+    fontSize: '13px',
     outline: 'none',
     backgroundColor: 'rgba(255,255,255,0.1)',
     color: 'white'
@@ -481,12 +610,21 @@ const styles = {
     cursor: 'pointer',
     transition: 'all 0.2s ease'
   },
-  typeIndicator: {
-    width: '4px',
-    height: '60px',
-    borderRadius: '2px',
+  placeIconContainer: {
     marginRight: '12px',
     flexShrink: 0
+  },
+  categoryIcon: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '2px solid rgba(255,255,255,0.3)'
+  },
+  categoryEmoji: {
+    fontSize: '16px'
   },
   placeInfo: {
     flex: 1,
@@ -563,52 +701,44 @@ const styles = {
     fontSize: '12px',
     marginTop: '10px'
   },
-  userSection: {
-    padding: '20px',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    marginTop: 'auto'
+  legendSection: {
+    padding: '15px 20px',
+    borderTop: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.2)'
   },
-  userInfo: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+  legendGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px'
   },
-  userDetails: {
-    flex: 1
-  },
-  userName: {
-    fontSize: '14px',
-    color: 'white',
-    marginBottom: '4px'
-  },
-  userLocation: {
-    fontSize: '12px',
-    color: 'rgba(255,255,255,0.7)',
-    fontStyle: 'italic'
-  },
-  signOutButton: {
-    background: 'rgba(255,255,255,0.1)',
-    border: '1px solid rgba(255,255,255,0.3)',
-    borderRadius: '50%',
-    padding: '8px',
-    cursor: 'pointer',
-    color: 'white',
+  legendItem: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    gap: '8px'
   },
-  signInPrompt: {
-    textAlign: 'center'
+  legendIcon: {
+    width: '20px',
+    height: '20px',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
   },
-  signInButton: {
-    padding: '10px 20px',
-    backgroundColor: '#17E88F',
-    color: '#032842',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600'
+  legendEmoji: {
+    fontSize: '10px'
+  },
+  legendLabel: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.8)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  legendMore: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.6)',
+    fontStyle: 'italic'
   }
 };
 
