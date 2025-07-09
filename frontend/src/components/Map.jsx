@@ -7,7 +7,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   const graphicsLayer = useRef(null);
   const circleGraphic = useRef(null);
   const markersGraphics = useRef([]);
-  const trafficLayer = useRef(null);
+  const catchmentGraphics = useRef([]);
 
   // Initialize ArcGIS modules
   useEffect(() => {
@@ -46,20 +46,27 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         // Create graphics layer
         graphicsLayer.current = new GraphicsLayer.default();
 
-        // Create map
+        // Create map with minimal UI
         const map = new Map.default({
-          basemap: 'gray-vector', // Default to light gray basemap
+          basemap: 'dark-gray-vector', // Clean dark basemap
           layers: [graphicsLayer.current]
         });
 
-        // Create map view
+        // Create map view with minimal UI
         mapView.current = new MapView.default({
           container: mapDiv.current,
           map: map,
           center: [4.3517, 50.8503], // Brussels coordinates [lng, lat]
           zoom: 10,
           ui: {
-            components: ["attribution"]
+            components: [] // Remove all UI components
+          },
+          // Remove default padding
+          padding: {
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0
           }
         });
 
@@ -158,6 +165,64 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       }
     },
 
+    async addCatchmentPolygons(catchmentData) {
+      if (!mapView.current || !graphicsLayer.current) return;
+
+      try {
+        const [Graphic, Polygon, SimpleFillSymbol, SimpleLineSymbol] = await Promise.all([
+          import('@arcgis/core/Graphic'),
+          import('@arcgis/core/geometry/Polygon'),
+          import('@arcgis/core/symbols/SimpleFillSymbol'),
+          import('@arcgis/core/symbols/SimpleLineSymbol')
+        ]);
+
+        // Clear existing catchment graphics
+        catchmentGraphics.current.forEach(graphic => {
+          graphicsLayer.current.remove(graphic);
+        });
+        catchmentGraphics.current = [];
+
+        // Colors for different drive times
+        const colors = [
+          [0, 123, 255, 0.3],   // 15 min - blue
+          [255, 193, 7, 0.3],   // 20 min - amber
+          [220, 53, 69, 0.3]    // 30 min - red
+        ];
+
+        catchmentData.forEach((catchment, index) => {
+          if (catchment.geometry && catchment.geometry.coordinates) {
+            const polygon = new Polygon.default({
+              rings: catchment.geometry.coordinates,
+              spatialReference: mapView.current.spatialReference
+            });
+
+            const fillSymbol = new SimpleFillSymbol.default({
+              color: colors[index % colors.length],
+              outline: new SimpleLineSymbol.default({
+                color: [colors[index % colors.length][0], colors[index % colors.length][1], colors[index % colors.length][2], 0.8],
+                width: 2
+              })
+            });
+
+            const graphic = new Graphic.default({
+              geometry: polygon,
+              symbol: fillSymbol,
+              attributes: {
+                driveTime: catchment.name,
+                population: catchment.totalPopulation
+              }
+            });
+
+            graphicsLayer.current.add(graphic);
+            catchmentGraphics.current.push(graphic);
+          }
+        });
+
+      } catch (error) {
+        console.error('Error adding catchment polygons:', error);
+      }
+    },
+
     clearCircle() {
       if (circleGraphic.current && graphicsLayer.current) {
         graphicsLayer.current.remove(circleGraphic.current);
@@ -165,10 +230,26 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       }
     },
 
-    async toggleTraffic(show = true) {
-      // Note: Traffic layer implementation would require additional ArcGIS services
-      // This is a placeholder for traffic functionality
-      console.log('Traffic toggle:', show);
+    clearCatchments() {
+      if (graphicsLayer.current && catchmentGraphics.current.length > 0) {
+        catchmentGraphics.current.forEach(graphic => {
+          graphicsLayer.current.remove(graphic);
+        });
+        catchmentGraphics.current = [];
+      }
+    },
+
+    clearAll() {
+      if (graphicsLayer.current) {
+        graphicsLayer.current.removeAll();
+        circleGraphic.current = null;
+        markersGraphics.current = [];
+        catchmentGraphics.current = [];
+      }
+    },
+
+    getMapView() {
+      return mapView.current;
     }
   }));
 
@@ -229,12 +310,12 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       });
 
       const markerSymbol = new SimpleMarkerSymbol.default({
-        color: [0, 123, 255, 1],
+        color: [0, 255, 0, 1], // Green for selected location
         outline: {
           color: [255, 255, 255, 1],
           width: 3
         },
-        size: 16
+        size: 20
       });
 
       const graphic = new Graphic.default({
@@ -365,6 +446,11 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       if (circleGraphic.current && graphicsLayer.current) {
         graphicsLayer.current.remove(circleGraphic.current);
       }
+      if (catchmentGraphics.current.length > 0 && graphicsLayer.current) {
+        catchmentGraphics.current.forEach(graphic => {
+          graphicsLayer.current.remove(graphic);
+        });
+      }
     };
   }, []);
 
@@ -374,10 +460,12 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       style={{ 
         width: '100%', 
         height: '100%',
-        position: 'relative'
+        position: 'relative',
+        margin: 0,
+        padding: 0
       }}
     >
-      {/* Loading indicator */}
+      {/* Minimal loading indicator */}
       <div style={{
         position: 'absolute',
         top: '50%',
@@ -391,7 +479,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         fontSize: '14px',
         display: mapView.current ? 'none' : 'block'
       }}>
-        Loading ArcGIS Map...
+        Loading Map...
       </div>
     </div>
   );

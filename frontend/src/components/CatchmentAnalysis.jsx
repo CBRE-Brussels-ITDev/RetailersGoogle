@@ -1,111 +1,165 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
+import GooglePlacesService from '../services/GooglePlaces';
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 // Catchment Controls Component
 const CatchmentControls = ({ onCalculate, isLoading, selectedLocation }) => {
-  const [searchAddress, setSearchAddress] = useState('Brussels');
-  const [distances, setDistances] = useState('15');
-  const [departTime, setDepartTime] = useState('');
-  const [travelMode, setTravelMode] = useState('Driving Time');
-
-  useEffect(() => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    setDepartTime(now.toISOString().slice(0, 16));
-  }, []);
+  const [travelMode, setTravelMode] = useState('driving');
+  const [driveTimes, setDriveTimes] = useState([15, 20, 30]);
+  const [customTime, setCustomTime] = useState('');
+  const [showDemographics, setShowDemographics] = useState(true);
 
   const handleCalculate = () => {
+    if (!selectedLocation) {
+      alert('Please click on the map to select a location first');
+      return;
+    }
+
     onCalculate({
-      address: searchAddress,
-      distances: distances.split(',').map(d => parseInt(d.trim())),
-      departTime,
-      travelMode
+      location: selectedLocation,
+      travelMode,
+      driveTimes,
+      showDemographics
     });
   };
 
+  const addCustomTime = () => {
+    const time = parseInt(customTime);
+    if (time > 0 && time <= 60 && !driveTimes.includes(time)) {
+      setDriveTimes([...driveTimes, time].sort((a, b) => a - b));
+      setCustomTime('');
+    }
+  };
+
+  const removeTime = (timeToRemove) => {
+    setDriveTimes(driveTimes.filter(time => time !== timeToRemove));
+  };
+
+  const travelModeOptions = [
+    { value: 'driving', label: '🚗 Driving', icon: '🚗' },
+    { value: 'walking', label: '🚶 Walking', icon: '🚶' },
+    { value: 'transit', label: '🚌 Transit', icon: '🚌' },
+    { value: 'bicycling', label: '🚴 Bicycling', icon: '🚴' }
+  ];
+
   return (
-    <div style={styles.topBar}>
-      <div style={styles.inputGroup}>
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="#80BBAD">
-          <path fillRule="evenodd" d="M11.291 21.706 12 21l-.709.706zM12 21l.708.706a1 1 0 0 1-1.417 0l-.006-.007-.017-.017-.062-.063a47.708 47.708 0 0 1-1.04-1.106 49.562 49.562 0 0 1-2.456-2.908c-.892-1.15-1.804-2.45-2.497-3.734C4.535 12.612 4 11.248 4 10c0-4.539 3.592-8 8-8 4.408 0 8 3.461 8 8 0 1.248-.535 2.612-1.213 3.87-.693 1.286-1.604 2.585-2.497 3.735a49.583 49.583 0 0 1-3.496 4.014l-.062.063-.017.017-.006.006L12 21zm0-8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" clipRule="evenodd" />
-        </svg>
-        <input
-          type="text"
-          value={searchAddress}
-          onChange={(e) => setSearchAddress(e.target.value)}
-          placeholder="Enter a location"
-          style={styles.input}
-        />
+    <div style={styles.controlsPanel}>
+      <div style={styles.controlsHeader}>
+        <h3 style={styles.controlsTitle}>🕐 Drive Time Catchment Analysis</h3>
+        {selectedLocation && (
+          <div style={styles.locationDisplay}>
+            📍 {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
+          </div>
+        )}
       </div>
 
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Distances (min):</label>
-        <input
-          type="text"
-          value={distances}
-          onChange={(e) => setDistances(e.target.value)}
-          placeholder="15,30,45"
-          style={styles.smallInput}
-        />
-      </div>
+      <div style={styles.controlsContent}>
+        {/* Travel Mode Selection */}
+        <div style={styles.fieldGroup}>
+          <label style={styles.label}>Travel Mode:</label>
+          <div style={styles.travelModeGrid}>
+            {travelModeOptions.map(mode => (
+              <button
+                key={mode.value}
+                onClick={() => setTravelMode(mode.value)}
+                style={{
+                  ...styles.travelModeButton,
+                  ...(travelMode === mode.value ? styles.travelModeButtonActive : {})
+                }}
+              >
+                <span style={styles.modeIcon}>{mode.icon}</span>
+                <span style={styles.modeLabel}>{mode.label.replace(/🚗|🚶|🚌|🚴/, '').trim()}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Depart time:</label>
-        <input
-          type="datetime-local"
-          value={departTime}
-          onChange={(e) => setDepartTime(e.target.value)}
-          style={styles.input}
-        />
-      </div>
+        {/* Drive Times */}
+        <div style={styles.fieldGroup}>
+          <label style={styles.label}>Drive Times (minutes):</label>
+          <div style={styles.timeChips}>
+            {driveTimes.map(time => (
+              <div key={time} style={styles.timeChip}>
+                <span>{time}min</span>
+                <button
+                  onClick={() => removeTime(time)}
+                  style={styles.removeTimeButton}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          
+          <div style={styles.addTimeContainer}>
+            <input
+              type="number"
+              value={customTime}
+              onChange={(e) => setCustomTime(e.target.value)}
+              placeholder="Add time"
+              min="1"
+              max="60"
+              style={styles.timeInput}
+            />
+            <button
+              onClick={addCustomTime}
+              disabled={!customTime || customTime < 1 || customTime > 60}
+              style={styles.addTimeButton}
+            >
+              Add
+            </button>
+          </div>
+        </div>
 
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Travel mode:</label>
-        <select
-          value={travelMode}
-          onChange={(e) => setTravelMode(e.target.value)}
-          style={styles.select}
+        {/* Options */}
+        <div style={styles.fieldGroup}>
+          <label style={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={showDemographics}
+              onChange={(e) => setShowDemographics(e.target.checked)}
+              style={styles.checkbox}
+            />
+            Include demographic data
+          </label>
+        </div>
+
+        {/* Calculate Button */}
+        <button
+          onClick={handleCalculate}
+          disabled={isLoading || !selectedLocation || driveTimes.length === 0}
+          style={{
+            ...styles.calculateButton,
+            ...(isLoading || !selectedLocation || driveTimes.length === 0 ? styles.calculateButtonDisabled : {})
+          }}
         >
-          <option value="Driving Time">Car</option>
-          <option value="Trucking Time">Truck</option>
-          <option value="Walking Time">Walk</option>
-        </select>
+          {isLoading ? 'Calculating...' : 'Calculate Catchment'}
+        </button>
       </div>
-
-      <button
-        onClick={handleCalculate}
-        disabled={isLoading || !selectedLocation}
-        style={{
-          ...styles.button,
-          ...(isLoading || !selectedLocation ? styles.buttonDisabled : {})
-        }}
-      >
-        {isLoading ? 'Calculating...' : 'Calculate'}
-      </button>
     </div>
   );
 };
 
 // Demographic Charts Component
-const DemographicCharts = ({ data, uniqueId }) => {
+const DemographicCharts = ({ data, driveTime }) => {
   const genderData = {
     labels: ['Women', 'Men'],
     datasets: [{
       data: [data.pourcentWomen, data.pourcentMan],
-      backgroundColor: ['rgba(136, 80, 115, 1)', 'rgba(62, 125, 166, 1)'],
-      borderColor: ['rgba(136, 80, 115, 1)', 'rgba(62, 125, 166, 1)'],
+      backgroundColor: ['#FF6384', '#36A2EB'],
+      borderColor: ['#FF6384', '#36A2EB'],
       borderWidth: 2,
     }]
   };
 
   const ageData = {
-    labels: ['0-14', '15-29', '30-44', '45-59', '59+'],
+    labels: ['0-14', '15-29', '30-44', '45-59', '60+'],
     datasets: [{
-      label: 'Age range',
+      label: 'Population %',
       data: [
         data.pourcentAge0014,
         data.pourcentAge1529,
@@ -114,13 +168,13 @@ const DemographicCharts = ({ data, uniqueId }) => {
         data.pourcentAge60PL
       ],
       backgroundColor: [
-        'rgba(210, 120, 90, 1)',
-        'rgba(31, 55, 101, 1)',
-        'rgba(23, 232, 143, 1)',
-        'rgba(219, 217, 154, 1)',
-        'rgba(163, 136, 191, 1)'
+        '#FF6384',
+        '#36A2EB',
+        '#FFCE56',
+        '#4BC0C0',
+        '#9966FF'
       ],
-      borderWidth: 2,
+      borderWidth: 1,
     }]
   };
 
@@ -130,26 +184,49 @@ const DemographicCharts = ({ data, uniqueId }) => {
     animation: { duration: 0 },
     plugins: {
       legend: {
-        position: 'bottom'
+        position: 'bottom',
+        labels: {
+          font: {
+            size: 11
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          font: {
+            size: 10
+          }
+        }
+      },
+      x: {
+        ticks: {
+          font: {
+            size: 10
+          }
+        }
       }
     }
   };
 
   return (
-    <div style={styles.chartsContainer}>
-      <div style={styles.chartSection}>
-        <h4 style={styles.chartTitle}>Gender Distribution</h4>
-        <div style={styles.chartWrapper}>
-          <Doughnut data={genderData} options={chartOptions} />
+    <div style={styles.demographicSection}>
+      <h4 style={styles.demographicTitle}>{driveTime} Drive Time Demographics</h4>
+      <div style={styles.chartsGrid}>
+        <div style={styles.chartContainer}>
+          <h5 style={styles.chartTitle}>Gender Distribution</h5>
+          <div style={styles.chartWrapper}>
+            <Doughnut data={genderData} options={chartOptions} />
+          </div>
         </div>
-      </div>
-      
-      <hr style={styles.divider} />
-      
-      <div style={styles.chartSection}>
-        <h4 style={styles.chartTitle}>Population by Age</h4>
-        <div style={styles.chartWrapper}>
-          <Bar data={ageData} options={chartOptions} />
+        
+        <div style={styles.chartContainer}>
+          <h5 style={styles.chartTitle}>Age Distribution</h5>
+          <div style={styles.chartWrapper}>
+            <Bar data={ageData} options={chartOptions} />
+          </div>
         </div>
       </div>
     </div>
@@ -157,23 +234,26 @@ const DemographicCharts = ({ data, uniqueId }) => {
 };
 
 // Catchment Results Component
-const CatchmentResults = ({ results, onClose, onDownload, onPrint }) => {
+const CatchmentResults = ({ results, onClose, onDownload }) => {
   const [activeTab, setActiveTab] = useState(0);
 
   if (!results || results.length === 0) return null;
 
   const formatNumber = (num) => {
-    return new Intl.NumberFormat('de-DE').format(num);
+    return new Intl.NumberFormat('en-US').format(num);
+  };
+
+  const getTimeColor = (index) => {
+    const colors = ['#007bff', '#ffc107', '#dc3545', '#28a745', '#6f42c1'];
+    return colors[index % colors.length];
   };
 
   return (
     <div style={styles.resultsPanel}>
       <div style={styles.resultsHeader}>
         <div style={styles.resultsTitle}>
-          <svg width="20" height="20" fill="white" viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM13 17h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-          </svg>
-          <span style={styles.titleText}>Catchment Details</span>
+          <span style={styles.resultsIcon}>🎯</span>
+          <span>Catchment Analysis Results</span>
         </div>
         <button onClick={onClose} style={styles.closeButton}>
           ✕
@@ -188,7 +268,8 @@ const CatchmentResults = ({ results, onClose, onDownload, onPrint }) => {
               onClick={() => setActiveTab(index)}
               style={{
                 ...styles.tabButton,
-                ...(activeTab === index ? styles.tabButtonActive : {})
+                ...(activeTab === index ? styles.tabButtonActive : {}),
+                borderBottomColor: getTimeColor(index)
               }}
             >
               {result.name}
@@ -199,34 +280,30 @@ const CatchmentResults = ({ results, onClose, onDownload, onPrint }) => {
         <div style={styles.tabContent}>
           {results[activeTab] && (
             <div style={styles.tabPane}>
-              <table style={styles.dataTable}>
-                <tbody>
-                  <tr>
-                    <td><b>Purchase Power</b></td>
-                    <td>{results[activeTab].totalMIO} mio €</td>
-                  </tr>
-                  <tr>
-                    <td><b>Purchase Power / person</b></td>
-                    <td>{results[activeTab].purchasePowerPerson} €</td>
-                  </tr>
-                  <tr>
-                    <td><b>Household Size</b></td>
-                    <td>{results[activeTab].householdsMember}</td>
-                  </tr>
-                  <tr>
-                    <td><b>Households</b></td>
-                    <td>{results[activeTab].totalHouseHolds}</td>
-                  </tr>
-                  <tr>
-                    <td><b>Population</b></td>
-                    <td>{formatNumber(results[activeTab].totalPopulation)}</td>
-                  </tr>
-                </tbody>
-              </table>
+              {/* Key Metrics */}
+              <div style={styles.metricsGrid}>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>{formatNumber(results[activeTab].totalPopulation)}</div>
+                  <div style={styles.metricLabel}>Total Population</div>
+                </div>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>{formatNumber(results[activeTab].totalHouseHolds)}</div>
+                  <div style={styles.metricLabel}>Households</div>
+                </div>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>{results[activeTab].householdsMember}</div>
+                  <div style={styles.metricLabel}>Avg. Household Size</div>
+                </div>
+                <div style={styles.metricCard}>
+                  <div style={styles.metricValue}>€{formatNumber(results[activeTab].purchasePowerPerson)}</div>
+                  <div style={styles.metricLabel}>Purchase Power/Person</div>
+                </div>
+              </div>
 
+              {/* Demographics Charts */}
               <DemographicCharts 
                 data={results[activeTab]} 
-                uniqueId={`tab-${activeTab}`}
+                driveTime={results[activeTab].name}
               />
             </div>
           )}
@@ -235,117 +312,105 @@ const CatchmentResults = ({ results, onClose, onDownload, onPrint }) => {
 
       <div style={styles.resultsFooter}>
         <button onClick={onDownload} style={styles.downloadButton}>
-          Download PDF
-        </button>
-        <button onClick={onPrint} style={styles.printButton}>
-          Print Map
+          📊 Download Report
         </button>
       </div>
     </div>
   );
 };
 
-// Layer Switcher Component
-const LayerSwitcher = ({ currentLayer, onLayerChange }) => {
-  return (
-    <div style={styles.layerSwitcher}>
-      <button
-        onClick={onLayerChange}
-        style={styles.layerButton}
-      >
-        {currentLayer === 'catchment' ? 'Switch to Commune' : 'Switch to Catchment'}
-      </button>
-    </div>
-  );
-};
-
-// Basemap Selector Component
-const BasemapSelector = ({ onBasemapChange }) => {
-  const basemaps = [
-    { id: 'light', name: 'Light Gray Canvas', image: '/img/thumbnail1607388219207.jpeg' },
-    { id: 'dark', name: 'Dark Gray Canvas', image: '/img/thumbnail1607387673856.jpeg' },
-    { id: 'satellite', name: 'Satellite', image: '/img/thumbnail1607389112065.jpeg' },
-    { id: 'terrain', name: 'Terrain', image: '/img/thumbnail1607389307240.jpeg' }
-  ];
-
-  return (
-    <div style={styles.basemapContainer}>
-      <h4 style={styles.basemapTitle}>Basemap Options:</h4>
-      {basemaps.map(basemap => (
-        <div 
-          key={basemap.id}
-          style={styles.basemapOption}
-          onClick={() => onBasemapChange(basemap.id)}
-        >
-          <img 
-            src={basemap.image} 
-            alt={basemap.name}
-            style={styles.basemapThumbnail}
-            onError={(e) => {
-              e.target.style.display = 'none';
-            }}
-          />
-          <span style={styles.basemapName}>{basemap.name}</span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 // Main Catchment Analysis Component
 const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
-  const [currentLayer, setCurrentLayer] = useState('catchment');
   const [catchmentResults, setCatchmentResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [currentParams, setCurrentParams] = useState(null);
 
   const handleCalculate = async (params) => {
     setIsLoading(true);
+    setCurrentParams(params);
+    
     try {
-      // Mock catchment calculation - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Use the actual API through GooglePlacesService
+      const response = await GooglePlacesService.calculateCatchment(
+        params.location,
+        params.travelMode,
+        params.driveTimes,
+        params.showDemographics
+      );
       
-      // Mock results based on distances
-      const mockResults = params.distances.map((distance, index) => ({
-        name: `${distance} minutes`,
-        totalPopulation: Math.floor(Math.random() * 50000) + 10000,
-        pourcentWomen: Math.floor(Math.random() * 10) + 45,
-        pourcentMan: Math.floor(Math.random() * 10) + 45,
-        pourcentAge0014: Math.floor(Math.random() * 20) + 10,
-        pourcentAge1529: Math.floor(Math.random() * 20) + 15,
-        pourcentAge3044: Math.floor(Math.random() * 20) + 20,
-        pourcentAge4559: Math.floor(Math.random() * 20) + 15,
-        pourcentAge60PL: Math.floor(Math.random() * 20) + 10,
-        totalHouseHolds: Math.floor(Math.random() * 20000) + 5000,
-        householdsMember: (Math.random() * 2 + 2).toFixed(1),
-        totalMIO: Math.floor(Math.random() * 500) + 100,
-        purchasePowerPerson: Math.floor(Math.random() * 10000) + 25000
-      }));
-
-      setCatchmentResults(mockResults);
+      setCatchmentResults(response.catchmentResults || []);
       setShowResults(true);
+      
+      // Add catchment polygons to map
+      if (map && map.addCatchmentPolygons) {
+        map.addCatchmentPolygons(response.catchmentResults || []);
+      }
+      
     } catch (error) {
       console.error('Error calculating catchment:', error);
+      alert('Error calculating catchment. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLayerChange = () => {
-    setCurrentLayer(prev => prev === 'catchment' ? 'commune' : 'catchment');
-  };
+  // Remove the generateDriveTimePolygon function since we're using real API data
 
   const handleDownload = () => {
-    alert('Download functionality would generate PDF report');
+    // Generate a simple CSV report
+    const csvContent = generateCSVReport(catchmentResults, currentParams);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `catchment_analysis_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const handlePrint = () => {
-    window.print();
+  const generateCSVReport = (results, params) => {
+    const headers = [
+      'Drive Time (min)',
+      'Total Population',
+      'Households',
+      'Avg Household Size',
+      'Women (%)',
+      'Men (%)',
+      'Age 0-14 (%)',
+      'Age 15-29 (%)',
+      'Age 30-44 (%)',
+      'Age 45-59 (%)',
+      'Age 60+ (%)',
+      'Purchase Power per Person (€)'
+    ];
+
+    const rows = results.map(result => [
+      result.driveTime,
+      result.totalPopulation,
+      result.totalHouseHolds,
+      result.householdsMember,
+      result.pourcentWomen.toFixed(1),
+      result.pourcentMan.toFixed(1),
+      result.pourcentAge0014.toFixed(1),
+      result.pourcentAge1529.toFixed(1),
+      result.pourcentAge3044.toFixed(1),
+      result.pourcentAge4559.toFixed(1),
+      result.pourcentAge60PL.toFixed(1),
+      result.purchasePowerPerson
+    ]);
+
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
   };
 
-  const handleBasemapChange = (basemapId) => {
-    console.log('Changing basemap to:', basemapId);
-    // Implement basemap change logic
+  const clearResults = () => {
+    setShowResults(false);
+    setCatchmentResults([]);
+    if (map && map.clearCatchments) {
+      map.clearCatchments();
+    }
   };
 
   return (
@@ -357,20 +422,23 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
         selectedLocation={selectedLocation}
       />
 
-      {/* Layer Switcher */}
-      <LayerSwitcher
-        currentLayer={currentLayer}
-        onLayerChange={handleLayerChange}
-      />
-
       {/* Results Panel */}
       {showResults && (
         <CatchmentResults
           results={catchmentResults}
-          onClose={() => setShowResults(false)}
+          onClose={clearResults}
           onDownload={handleDownload}
-          onPrint={handlePrint}
         />
+      )}
+
+      {/* Clear Results Button */}
+      {showResults && (
+        <button
+          onClick={clearResults}
+          style={styles.clearResultsButton}
+        >
+          🗑️ Clear Results
+        </button>
       )}
 
       {/* Loading Overlay */}
@@ -378,8 +446,19 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
         <div style={styles.loadingOverlay}>
           <div style={styles.loadingContent}>
             <div style={styles.spinner}></div>
-            <h2 style={styles.loadingText}>Calculating Catchment...</h2>
+            <h3 style={styles.loadingText}>Calculating Drive Time Catchment...</h3>
+            <p style={styles.loadingSubText}>Analyzing demographic data and accessibility</p>
           </div>
+        </div>
+      )}
+
+      {/* Instructions */}
+      {!selectedLocation && (
+        <div style={styles.instructionsPanel}>
+          <h3 style={styles.instructionsTitle}>📍 Get Started</h3>
+          <p style={styles.instructionsText}>
+            Click anywhere on the map to select a location for catchment analysis
+          </p>
         </div>
       )}
     </div>
@@ -393,106 +472,172 @@ const styles = {
     width: '100%',
     height: '100%'
   },
-  topBar: {
+  controlsPanel: {
     position: 'absolute',
     top: '20px',
     left: '20px',
-    right: '20px',
-    display: 'flex',
-    gap: '15px',
+    width: '400px',
     backgroundColor: 'white',
-    padding: '15px',
-    borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+    borderRadius: '12px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
     zIndex: 1000,
-    alignItems: 'center',
-    flexWrap: 'wrap'
+    overflow: 'hidden'
   },
-  inputGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
+  controlsHeader: {
+    padding: '20px',
+    backgroundColor: '#f8f9fa',
+    borderBottom: '1px solid #e9ecef'
+  },
+  controlsTitle: {
+    margin: '0 0 10px 0',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  locationDisplay: {
+    fontSize: '12px',
+    color: '#666',
+    backgroundColor: '#e8f5e8',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    display: 'inline-block'
+  },
+  controlsContent: {
+    padding: '20px'
+  },
+  fieldGroup: {
+    marginBottom: '20px'
   },
   label: {
+    display: 'block',
     fontSize: '14px',
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#333',
-    whiteSpace: 'nowrap'
+    marginBottom: '8px'
   },
-  input: {
-    padding: '8px 12px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '14px',
-    outline: 'none',
-    minWidth: '150px'
+  travelModeGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px'
   },
-  smallInput: {
-    padding: '8px 12px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '14px',
-    outline: 'none',
-    width: '80px'
-  },
-  select: {
-    padding: '8px 12px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '14px',
-    outline: 'none',
+  travelModeButton: {
+    padding: '12px 8px',
+    border: '2px solid #e9ecef',
+    borderRadius: '8px',
     backgroundColor: 'white',
-    minWidth: '120px'
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px'
   },
-  button: {
-    padding: '10px 20px',
+  travelModeButtonActive: {
+    borderColor: '#007bff',
+    backgroundColor: '#e7f3ff'
+  },
+  modeIcon: {
+    fontSize: '20px'
+  },
+  modeLabel: {
+    fontSize: '12px',
+    fontWeight: '500'
+  },
+  timeChips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginBottom: '10px'
+  },
+  timeChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 12px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    borderRadius: '20px',
+    fontSize: '14px',
+    fontWeight: '500'
+  },
+  removeTimeButton: {
+    background: 'none',
+    border: 'none',
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: '16px',
+    padding: '0',
+    width: '20px',
+    height: '20px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  addTimeContainer: {
+    display: 'flex',
+    gap: '8px'
+  },
+  timeInput: {
+    flex: 1,
+    padding: '8px 12px',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    fontSize: '14px'
+  },
+  addTimeButton: {
+    padding: '8px 16px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px'
+  },
+  checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  checkbox: {
+    cursor: 'pointer'
+  },
+  calculateButton: {
+    width: '100%',
+    padding: '12px',
     backgroundColor: '#007bff',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
-    fontWeight: '500',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: '600',
     cursor: 'pointer',
     transition: 'background-color 0.2s'
   },
-  buttonDisabled: {
+  calculateButtonDisabled: {
     backgroundColor: '#ccc',
     cursor: 'not-allowed'
-  },
-  layerSwitcher: {
-    position: 'absolute',
-    bottom: '20px',
-    left: '20px',
-    zIndex: 1000
-  },
-  layerButton: {
-    padding: '12px 20px',
-    backgroundColor: '#032842',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
   },
   resultsPanel: {
     position: 'absolute',
     top: '20px',
     right: '20px',
-    width: '400px',
+    width: '450px',
     backgroundColor: 'white',
-    borderRadius: '8px',
+    borderRadius: '12px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
     zIndex: 1000,
     maxHeight: '80vh',
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    overflow: 'hidden'
   },
   resultsHeader: {
-    backgroundColor: '#032842',
-    color: 'white',
-    padding: '15px 20px',
-    borderRadius: '8px 8px 0 0',
+    padding: '20px',
+    backgroundColor: '#f8f9fa',
+    borderBottom: '1px solid #e9ecef',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center'
@@ -500,129 +645,137 @@ const styles = {
   resultsTitle: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px'
+    gap: '8px',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#333'
   },
-  titleText: {
-    fontSize: '16px',
-    fontWeight: '600'
+  resultsIcon: {
+    fontSize: '20px'
   },
   closeButton: {
     background: 'none',
     border: 'none',
-    color: 'white',
-    fontSize: '18px',
+    fontSize: '20px',
     cursor: 'pointer',
-    padding: '5px'
+    color: '#666',
+    padding: '8px'
   },
   tabsContainer: {
     flex: 1,
-    overflow: 'hidden',
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    overflow: 'hidden'
   },
   tabHeaders: {
     display: 'flex',
     backgroundColor: '#f8f9fa',
-    borderBottom: '1px solid #e0e0e0'
+    borderBottom: '1px solid #e9ecef'
   },
   tabButton: {
     flex: 1,
-    padding: '10px 15px',
+    padding: '12px 16px',
     border: 'none',
     backgroundColor: 'transparent',
     cursor: 'pointer',
     fontSize: '14px',
-    borderBottom: '3px solid transparent'
+    fontWeight: '500',
+    borderBottom: '3px solid transparent',
+    transition: 'all 0.2s'
   },
   tabButtonActive: {
     backgroundColor: 'white',
-    borderBottom: '3px solid #007bff'
+    borderBottomColor: '#007bff'
   },
   tabContent: {
     flex: 1,
-    overflow: 'auto',
-    padding: '20px'
+    overflow: 'auto'
   },
   tabPane: {
-    height: '100%'
+    padding: '20px'
   },
-  dataTable: {
-    width: '100%',
-    borderCollapse: 'collapse',
+  metricsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '12px',
     marginBottom: '20px'
   },
-  chartsContainer: {
+  metricCard: {
+    padding: '16px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    textAlign: 'center'
+  },
+  metricValue: {
+    fontSize: '24px',
+    fontWeight: 'bold',
+    color: '#007bff',
+    marginBottom: '4px'
+  },
+  metricLabel: {
+    fontSize: '12px',
+    color: '#666',
+    fontWeight: '500'
+  },
+  demographicSection: {
     marginTop: '20px'
   },
-  chartSection: {
-    marginBottom: '20px'
+  demographicTitle: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    marginBottom: '15px',
+    color: '#333'
+  },
+  chartsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '16px'
+  },
+  chartContainer: {
+    backgroundColor: '#f8f9fa',
+    padding: '16px',
+    borderRadius: '8px'
   },
   chartTitle: {
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: '600',
-    marginBottom: '15px',
+    marginBottom: '12px',
     textAlign: 'center',
     color: '#333'
   },
   chartWrapper: {
-    height: '250px',
+    height: '200px',
     position: 'relative'
   },
-  divider: {
-    border: 'none',
-    borderTop: '1px solid #e0e0e0',
-    margin: '20px 0'
-  },
   resultsFooter: {
-    padding: '15px 20px',
-    borderTop: '1px solid #e0e0e0',
-    display: 'flex',
-    gap: '10px',
-    justifyContent: 'flex-end'
+    padding: '20px',
+    borderTop: '1px solid #e9ecef',
+    backgroundColor: '#f8f9fa'
   },
   downloadButton: {
-    padding: '10px 20px',
-    backgroundColor: '#007bff',
+    width: '100%',
+    padding: '12px',
+    backgroundColor: '#28a745',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     fontSize: '14px',
-    cursor: 'pointer'
-  },
-  printButton: {
-    padding: '10px 20px',
-    backgroundColor: '#6c757d',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-  basemapContainer: {
-    padding: '20px'
-  },
-  basemapTitle: {
-    fontSize: '16px',
     fontWeight: '600',
-    marginBottom: '15px',
-    color: 'white'
+    cursor: 'pointer'
   },
-  basemapOption: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '8px 0',
+  clearResultsButton: {
+    position: 'absolute',
+    bottom: '20px',
+    left: '20px',
+    padding: '12px 20px',
+    backgroundColor: '#dc3545',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
     cursor: 'pointer',
-    color: 'white'
-  },
-  basemapThumbnail: {
-    width: '40px',
-    height: '30px',
-    objectFit: 'cover',
-    borderRadius: '4px'
-  },
-  basemapName: {
-    fontSize: '14px'
+    fontSize: '14px',
+    fontWeight: '600',
+    zIndex: 1000
   },
   loadingOverlay: {
     position: 'fixed',
@@ -630,7 +783,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -641,17 +794,45 @@ const styles = {
     color: 'white'
   },
   spinner: {
-    width: '50px',
-    height: '50px',
-    border: '4px solid #f3f3f3',
-    borderTop: '4px solid #007bff',
+    width: '60px',
+    height: '60px',
+    border: '6px solid #f3f3f3',
+    borderTop: '6px solid #007bff',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     margin: '0 auto 20px'
   },
   loadingText: {
-    fontSize: '18px',
-    fontWeight: '600'
+    fontSize: '20px',
+    fontWeight: '600',
+    marginBottom: '10px'
+  },
+  loadingSubText: {
+    fontSize: '14px',
+    opacity: 0.8
+  },
+  instructionsPanel: {
+    position: 'absolute',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    backgroundColor: 'white',
+    padding: '20px',
+    borderRadius: '12px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+    textAlign: 'center',
+    zIndex: 1000
+  },
+  instructionsTitle: {
+    margin: '0 0 10px 0',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  instructionsText: {
+    margin: 0,
+    fontSize: '14px',
+    color: '#666'
   }
 };
 

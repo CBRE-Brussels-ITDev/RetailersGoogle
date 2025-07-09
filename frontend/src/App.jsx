@@ -20,7 +20,7 @@ function App() {
   
   // New catchment-related state
   const [currentLayer, setCurrentLayer] = useState('catchment');
-  const [showCatchmentMode, setShowCatchmentMode] = useState(false);
+  const [showCatchmentMode, setShowCatchmentMode] = useState(true); // Default to catchment mode
   const [catchmentData, setCatchmentData] = useState([]);
 
   const handlePlaceClick = async (placeId) => {
@@ -120,27 +120,29 @@ function App() {
 
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw', display: 'flex' }}>
-      {/* Left Sidebar */}
-      <CatchmentSidebar
-        visible={leftSidebarVisible}
-        places={searchResultsData}
-        onPlaceClick={handlePlaceClick}
-        onClose={() => setLeftSidebarVisible(false)}
-        selectedLocation={selectedLocation}
-        isLoading={isLoading}
-        currentLayer={currentLayer}
-        onSearch={handleSearch}
-        resultsCount={searchResults.length}
-      />
+      {/* Left Sidebar - Only show in places mode */}
+      {!showCatchmentMode && (
+        <CatchmentSidebar
+          visible={leftSidebarVisible}
+          places={searchResultsData}
+          onPlaceClick={handlePlaceClick}
+          onClose={() => setLeftSidebarVisible(false)}
+          selectedLocation={selectedLocation}
+          isLoading={isLoading}
+          currentLayer={currentLayer}
+          onSearch={handleSearch}
+          resultsCount={searchResults.length}
+        />
+      )}
 
-      {/* Map Container */}
+      {/* Map Container - Full screen */}
       <div style={{ 
         flex: 1, 
-        width: 'auto',
+        width: '100%',
+        height: '100%',
         position: 'relative',
-        marginLeft: leftSidebarVisible ? '350px' : '0',
-        marginRight: isPlaceDetailsSidebarOpen ? '400px' : '0',
-        transition: 'all 0.3s ease'
+        margin: 0,
+        padding: 0
       }}>
         <Map
           ref={mapRef}
@@ -152,17 +154,17 @@ function App() {
           style={{ width: '100%', height: '100%' }}
         />
 
-        {/* Control Panel */}
+        {/* Control Panel - Only show mode toggle and clear */}
         <div style={styles.controlPanel}>
           {/* Mode Toggle Button */}
           <button
             onClick={toggleCatchmentMode}
             style={{
               ...styles.modeButton,
-              backgroundColor: showCatchmentMode ? '#dc3545' : '#28a745'
+              backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545'
             }}
           >
-            {showCatchmentMode ? '🔍 Places Mode' : '📊 Catchment Mode'}
+            {showCatchmentMode ? '📊 Catchment Mode' : '🔍 Places Mode'}
           </button>
 
           {/* Clear Search Button */}
@@ -175,17 +177,19 @@ function App() {
             </button>
           )}
 
-          {/* Left Sidebar Toggle */}
-          <button
-            onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
-            style={styles.sidebarToggle}
-          >
-            {leftSidebarVisible ? '◀' : '▶'} Menu
-          </button>
+          {/* Left Sidebar Toggle - Only in places mode */}
+          {!showCatchmentMode && (
+            <button
+              onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
+              style={styles.sidebarToggle}
+            >
+              {leftSidebarVisible ? '◀' : '▶'} Menu
+            </button>
+          )}
         </div>
 
-        {/* Search Results Counter */}
-        {searchResultsData.length > 0 && (
+        {/* Search Results Counter - Only in places mode */}
+        {!showCatchmentMode && searchResultsData.length > 0 && (
           <div style={styles.resultsCounter}>
             <span style={styles.resultsText}>
               📍 {searchResultsData.length} place{searchResultsData.length !== 1 ? 's' : ''} found
@@ -193,7 +197,7 @@ function App() {
           </div>
         )}
 
-        {/* Conditional rendering based on mode */}
+        {/* Catchment Analysis - Show when in catchment mode */}
         {showCatchmentMode && (
           <CatchmentAnalysis
             map={mapRef.current}
@@ -203,8 +207,8 @@ function App() {
         )}
       </div>
 
-      {/* Right Sidebar for Place Details */}
-      {isPlaceDetailsSidebarOpen && (
+      {/* Right Sidebar for Place Details - Only in places mode */}
+      {!showCatchmentMode && isPlaceDetailsSidebarOpen && (
         <PlaceDetailsSidebar
           isOpen={isPlaceDetailsSidebarOpen}
           onClose={() => setIsPlaceDetailsSidebarOpen(false)}
