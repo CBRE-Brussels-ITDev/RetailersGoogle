@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
+import logo from '../assets/CBRE_white.svg'; // Adjust the path as necessary
 
 const CatchmentSidebar = ({ 
   visible, 
@@ -155,7 +156,7 @@ const CatchmentSidebar = ({
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerContent}>
-          <img src="/img/CBRE_white.svg" alt="CBRE" style={styles.logo} />
+          <img src={logo} alt="CBRE" style={styles.logo} />
           <h4 style={styles.title}>
             {currentLayer === 'catchment' ? 'CATCHMENT' : 'COMMUNE'}
           </h4>
