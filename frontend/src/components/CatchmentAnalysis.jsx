@@ -9,13 +9,18 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 // Catchment Controls Component
 const CatchmentControls = ({ onCalculate, isLoading, selectedLocation }) => {
   const [travelMode, setTravelMode] = useState('driving');
-  const [driveTimes, setDriveTimes] = useState([15, 20, 30]);
+  const [driveTimes, setDriveTimes] = useState([15, 30, 45]);
   const [customTime, setCustomTime] = useState('');
   const [showDemographics, setShowDemographics] = useState(true);
 
   const handleCalculate = () => {
     if (!selectedLocation) {
       alert('Please click on the map to select a location first');
+      return;
+    }
+
+    if (driveTimes.length === 0) {
+      alert('Please add at least one drive time');
       return;
     }
 
@@ -36,7 +41,9 @@ const CatchmentControls = ({ onCalculate, isLoading, selectedLocation }) => {
   };
 
   const removeTime = (timeToRemove) => {
-    setDriveTimes(driveTimes.filter(time => time !== timeToRemove));
+    if (driveTimes.length > 1) {
+      setDriveTimes(driveTimes.filter(time => time !== timeToRemove));
+    }
   };
 
   const travelModeOptions = [
@@ -85,12 +92,14 @@ const CatchmentControls = ({ onCalculate, isLoading, selectedLocation }) => {
             {driveTimes.map(time => (
               <div key={time} style={styles.timeChip}>
                 <span>{time}min</span>
-                <button
-                  onClick={() => removeTime(time)}
-                  style={styles.removeTimeButton}
-                >
-                  ×
-                </button>
+                {driveTimes.length > 1 && (
+                  <button
+                    onClick={() => removeTime(time)}
+                    style={styles.removeTimeButton}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -100,7 +109,7 @@ const CatchmentControls = ({ onCalculate, isLoading, selectedLocation }) => {
               type="number"
               value={customTime}
               onChange={(e) => setCustomTime(e.target.value)}
-              placeholder="Add time"
+              placeholder="Add time (1-60)"
               min="1"
               max="60"
               style={styles.timeInput}
@@ -146,6 +155,8 @@ const CatchmentControls = ({ onCalculate, isLoading, selectedLocation }) => {
 
 // Demographic Charts Component
 const DemographicCharts = ({ data, driveTime }) => {
+  if (!data) return null;
+
   const genderData = {
     labels: ['Women', 'Men'],
     datasets: [{
@@ -244,7 +255,7 @@ const CatchmentResults = ({ results, onClose, onDownload }) => {
   };
 
   const getTimeColor = (index) => {
-    const colors = ['#007bff', '#ffc107', '#dc3545', '#28a745', '#6f42c1'];
+    const colors = ['#007bff', '#ffc107', '#dc3545', '#28a745', '#6f42c1', '#fd7e14'];
     return colors[index % colors.length];
   };
 
@@ -331,7 +342,9 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
     setCurrentParams(params);
     
     try {
-      // Use the actual API through GooglePlacesService
+      console.log('Calculating catchment with params:', params);
+      
+      // Use the updated API call with correct parameters
       const response = await GooglePlacesService.calculateCatchment(
         params.location,
         params.travelMode,
@@ -339,12 +352,19 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
         params.showDemographics
       );
       
+      console.log('Catchment calculation response:', response);
+      
       setCatchmentResults(response.catchmentResults || []);
       setShowResults(true);
       
       // Add catchment polygons to map
-      if (map && map.addCatchmentPolygons) {
-        map.addCatchmentPolygons(response.catchmentResults || []);
+      if (map && response.catchmentResults && response.catchmentResults.length > 0) {
+        console.log('Adding catchment polygons to map');
+        if (map.addCatchmentPolygons) {
+          map.addCatchmentPolygons(response.catchmentResults);
+        } else {
+          console.error('Map addCatchmentPolygons method not available');
+        }
       }
       
     } catch (error) {
@@ -354,8 +374,6 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
       setIsLoading(false);
     }
   };
-
-  // Remove the generateDriveTimePolygon function since we're using real API data
 
   const handleDownload = () => {
     // Generate a simple CSV report
@@ -392,13 +410,13 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
       result.totalPopulation,
       result.totalHouseHolds,
       result.householdsMember,
-      result.pourcentWomen.toFixed(1),
-      result.pourcentMan.toFixed(1),
-      result.pourcentAge0014.toFixed(1),
-      result.pourcentAge1529.toFixed(1),
-      result.pourcentAge3044.toFixed(1),
-      result.pourcentAge4559.toFixed(1),
-      result.pourcentAge60PL.toFixed(1),
+      result.pourcentWomen?.toFixed(1) || 0,
+      result.pourcentMan?.toFixed(1) || 0,
+      result.pourcentAge0014?.toFixed(1) || 0,
+      result.pourcentAge1529?.toFixed(1) || 0,
+      result.pourcentAge3044?.toFixed(1) || 0,
+      result.pourcentAge4559?.toFixed(1) || 0,
+      result.pourcentAge60PL?.toFixed(1) || 0,
       result.purchasePowerPerson
     ]);
 
@@ -465,7 +483,7 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
   );
 };
 
-// Styles
+// Styles (keeping the same styles as before)
 const styles = {
   container: {
     position: 'relative',

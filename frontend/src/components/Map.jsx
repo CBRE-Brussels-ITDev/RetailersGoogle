@@ -1,4 +1,4 @@
-import React, { useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
+import { useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 
 const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData }, ref) => {
@@ -6,6 +6,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   const mapView = useRef(null);
   const graphicsLayer = useRef(null);
   const circleGraphic = useRef(null);
+  const selectedLocationGraphic = useRef(null);
   const markersGraphics = useRef([]);
   const catchmentGraphics = useRef([]);
 
@@ -91,6 +92,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
               circleGraphic.current = null;
             }
 
+            // Clear catchment polygons when new location is selected
+            clearCatchmentPolygons();
+
             if (onMapClick) {
               onMapClick(latitude, longitude);
             }
@@ -113,6 +117,16 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       }
     };
   }, [onMapClick]);
+
+  // Helper function to clear catchment polygons
+  const clearCatchmentPolygons = () => {
+    if (graphicsLayer.current && catchmentGraphics.current.length > 0) {
+      catchmentGraphics.current.forEach(graphic => {
+        graphicsLayer.current.remove(graphic);
+      });
+      catchmentGraphics.current = [];
+    }
+  };
 
   // Expose methods to the parent component
   useImperativeHandle(ref, () => ({
@@ -169,54 +183,97 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       if (!mapView.current || !graphicsLayer.current) return;
 
       try {
-        const [Graphic, Polygon, SimpleFillSymbol, SimpleLineSymbol] = await Promise.all([
+        const [Graphic, Polygon, SimpleFillSymbol, SimpleLineSymbol, TextSymbol] = await Promise.all([
           import('@arcgis/core/Graphic'),
           import('@arcgis/core/geometry/Polygon'),
           import('@arcgis/core/symbols/SimpleFillSymbol'),
-          import('@arcgis/core/symbols/SimpleLineSymbol')
+          import('@arcgis/core/symbols/SimpleLineSymbol'),
+          import('@arcgis/core/symbols/TextSymbol')
         ]);
 
         // Clear existing catchment graphics
-        catchmentGraphics.current.forEach(graphic => {
-          graphicsLayer.current.remove(graphic);
-        });
-        catchmentGraphics.current = [];
+        clearCatchmentPolygons();
 
-        // Colors for different drive times
+        // Colors for different drive times with better visibility
         const colors = [
-          [0, 123, 255, 0.3],   // 15 min - blue
-          [255, 193, 7, 0.3],   // 20 min - amber
-          [220, 53, 69, 0.3]    // 30 min - red
+          { fill: [0, 123, 255, 0.25], stroke: [0, 123, 255, 0.8] },      // Blue for first time
+          { fill: [255, 193, 7, 0.25], stroke: [255, 193, 7, 0.8] },      // Amber for second time
+          { fill: [220, 53, 69, 0.25], stroke: [220, 53, 69, 0.8] },      // Red for third time
+          { fill: [40, 167, 69, 0.25], stroke: [40, 167, 69, 0.8] },      // Green for fourth time
+          { fill: [102, 16, 242, 0.25], stroke: [102, 16, 242, 0.8] },    // Purple for fifth time
+          { fill: [255, 99, 132, 0.25], stroke: [255, 99, 132, 0.8] }     // Pink for sixth time
         ];
+
+        console.log('Adding catchment polygons:', catchmentData);
 
         catchmentData.forEach((catchment, index) => {
           if (catchment.geometry && catchment.geometry.coordinates) {
-            const polygon = new Polygon.default({
-              rings: catchment.geometry.coordinates,
-              spatialReference: mapView.current.spatialReference
-            });
+            try {
+              // Create polygon from coordinates
+              const polygon = new Polygon.default({
+                rings: catchment.geometry.coordinates,
+                spatialReference: mapView.current.spatialReference
+              });
 
-            const fillSymbol = new SimpleFillSymbol.default({
-              color: colors[index % colors.length],
-              outline: new SimpleLineSymbol.default({
-                color: [colors[index % colors.length][0], colors[index % colors.length][1], colors[index % colors.length][2], 0.8],
-                width: 2
-              })
-            });
+              const color = colors[index % colors.length];
+              const fillSymbol = new SimpleFillSymbol.default({
+                color: color.fill,
+                outline: new SimpleLineSymbol.default({
+                  color: color.stroke,
+                  width: 2,
+                  style: 'solid'
+                })
+              });
 
-            const graphic = new Graphic.default({
-              geometry: polygon,
-              symbol: fillSymbol,
-              attributes: {
-                driveTime: catchment.name,
-                population: catchment.totalPopulation
+              const graphic = new Graphic.default({
+                geometry: polygon,
+                symbol: fillSymbol,
+                attributes: {
+                  driveTime: catchment.name,
+                  population: catchment.totalPopulation,
+                  type: 'catchment'
+                }
+              });
+
+              graphicsLayer.current.add(graphic);
+              catchmentGraphics.current.push(graphic);
+
+              // Add label in the center of the polygon
+              const centroid = polygon.centroid;
+              if (centroid) {
+                const labelSymbol = new TextSymbol.default({
+                  color: color.stroke,
+                  haloColor: "white",
+                  haloSize: 2,
+                  text: catchment.name,
+                  xoffset: 0,
+                  yoffset: 0,
+                  font: {
+                    size: 14,
+                    family: "Arial",
+                    weight: "bold"
+                  }
+                });
+
+                const labelGraphic = new Graphic.default({
+                  geometry: centroid,
+                  symbol: labelSymbol,
+                  attributes: {
+                    type: 'catchment-label'
+                  }
+                });
+
+                graphicsLayer.current.add(labelGraphic);
+                catchmentGraphics.current.push(labelGraphic);
               }
-            });
 
-            graphicsLayer.current.add(graphic);
-            catchmentGraphics.current.push(graphic);
+            } catch (error) {
+              console.error('Error creating polygon for catchment:', catchment.name, error);
+            }
           }
         });
+
+        console.log(`Added ${catchmentGraphics.current.length} catchment graphics`);
 
       } catch (error) {
         console.error('Error adding catchment polygons:', error);
@@ -231,18 +288,14 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     },
 
     clearCatchments() {
-      if (graphicsLayer.current && catchmentGraphics.current.length > 0) {
-        catchmentGraphics.current.forEach(graphic => {
-          graphicsLayer.current.remove(graphic);
-        });
-        catchmentGraphics.current = [];
-      }
+      clearCatchmentPolygons();
     },
 
     clearAll() {
       if (graphicsLayer.current) {
         graphicsLayer.current.removeAll();
         circleGraphic.current = null;
+        selectedLocationGraphic.current = null;
         markersGraphics.current = [];
         catchmentGraphics.current = [];
       }
@@ -292,7 +345,15 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     }
   };
 
-  // Add marker for selected location
+  // Clear selected location marker
+  const clearSelectedLocation = () => {
+    if (selectedLocationGraphic.current && graphicsLayer.current) {
+      graphicsLayer.current.remove(selectedLocationGraphic.current);
+      selectedLocationGraphic.current = null;
+    }
+  };
+
+  // Add marker for selected location with improved visibility
   const addSelectedLocationMarker = async (location) => {
     if (!mapView.current || !graphicsLayer.current) return;
 
@@ -303,19 +364,24 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         import('@arcgis/core/symbols/SimpleMarkerSymbol')
       ]);
 
+      // Remove existing selected location marker
+      clearSelectedLocation();
+
       const point = new Point.default({
         longitude: location.lng,
         latitude: location.lat,
         spatialReference: mapView.current.spatialReference
       });
 
+      // Create a more visible marker for selected location
       const markerSymbol = new SimpleMarkerSymbol.default({
-        color: [0, 255, 0, 1], // Green for selected location
+        color: [255, 0, 0, 1], // Bright red for better visibility
         outline: {
           color: [255, 255, 255, 1],
           width: 3
         },
-        size: 20
+        size: 16,
+        style: 'circle'
       });
 
       const graphic = new Graphic.default({
@@ -323,12 +389,15 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         symbol: markerSymbol,
         attributes: {
           type: 'selected-location',
-          title: 'Selected Location'
+          title: 'Selected Location',
+          coordinates: `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`
         }
       });
 
       graphicsLayer.current.add(graphic);
-      markersGraphics.current.push(graphic);
+      selectedLocationGraphic.current = graphic;
+
+      console.log('Added selected location marker at:', location);
 
     } catch (error) {
       console.error('Error adding selected location marker:', error);
@@ -443,14 +512,11 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   useEffect(() => {
     return () => {
       clearMarkers();
+      clearSelectedLocation();
       if (circleGraphic.current && graphicsLayer.current) {
         graphicsLayer.current.remove(circleGraphic.current);
       }
-      if (catchmentGraphics.current.length > 0 && graphicsLayer.current) {
-        catchmentGraphics.current.forEach(graphic => {
-          graphicsLayer.current.remove(graphic);
-        });
-      }
+      clearCatchmentPolygons();
     };
   }, []);
 
@@ -465,22 +531,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         padding: 0
       }}
     >
-      {/* Minimal loading indicator */}
-      <div style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        zIndex: 1000,
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        color: 'white',
-        padding: '20px',
-        borderRadius: '8px',
-        fontSize: '14px',
-        display: mapView.current ? 'none' : 'block'
-      }}>
-        Loading Map...
-      </div>
+      
     </div>
   );
 });

@@ -49,22 +49,22 @@ const GooglePlacesService = {
         }
     },
 
-    // NEW: Catchment calculation method
-    async calculateCatchment(lat, lng, distances, departTime, travelMode) {
-        console.log('Calculating catchment:', { lat, lng, distances, departTime, travelMode });
+    // FIXED: Catchment calculation method with correct parameters
+    async calculateCatchment(location, travelMode, driveTimes, showDemographics) {
+        console.log('Calculating catchment:', { location, travelMode, driveTimes, showDemographics });
         try {
             const response = await axios.post(`${BASE_URL}/calculate-catchment`, {
-                lat,
-                lng,
-                distances,
-                departTime,
-                travelMode
+                location,
+                travelMode,
+                driveTimes,
+                showDemographics
             });
             
             console.log('Catchment response:', response.data);
             return {
                 catchmentResults: response.data.catchmentResults || [],
-                searchParams: response.data.searchParams || {}
+                searchParams: response.data.searchParams || {},
+                calculationInfo: response.data.calculationInfo || {}
             };
         } catch (error) {
             console.error('Error calculating catchment:', error);
@@ -72,7 +72,7 @@ const GooglePlacesService = {
         }
     },
 
-    // NEW: Get demographic data for a specific area
+    // Get demographic data for a specific area
     async getDemographicData(geometry) {
         console.log('Fetching demographic data for geometry:', geometry);
         try {
@@ -87,7 +87,7 @@ const GooglePlacesService = {
         }
     },
 
-    // NEW: Generate PDF report
+    // Generate PDF report
     async generateCatchmentReport(catchmentData, address, imageUrl) {
         console.log('Generating catchment report:', { catchmentData, address });
         try {
