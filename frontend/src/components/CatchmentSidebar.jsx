@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
-import logo from '../assets/CBRE_white.svg'; // Adjust the path as necessary
+import logo from '../assets/CBRE_white.svg';
 
 const CatchmentSidebar = ({ 
   visible, 
@@ -11,16 +11,25 @@ const CatchmentSidebar = ({
   isLoading,
   currentLayer,
   onSearch,
-  resultsCount
+  onCatchmentCalculate,
+  resultsCount,
+  showCatchmentMode,
+  catchmentData
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [filterByType, setFilterByType] = useState('all');
   
-  // Search form state
+  // Places search form state
   const [radius, setRadius] = useState('1000');
   const [category, setCategory] = useState('restaurant');
   const [getAllSectors, setGetAllSectors] = useState(false);
+
+  // Catchment form state
+  const [travelMode, setTravelMode] = useState('driving');
+  const [driveTimes, setDriveTimes] = useState([15, 30, 45]);
+  const [customTime, setCustomTime] = useState('');
+  const [showDemographics, setShowDemographics] = useState(true);
 
   // Radius options
   const radiusOptions = [
@@ -31,7 +40,7 @@ const CatchmentSidebar = ({
     { value: '10000', label: '10KM' }
   ];
 
-  // Categories for search
+  // Categories for places search
   const categories = [
     { value: 'restaurant', label: 'Restaurant' },
     { value: 'gas_station', label: 'Gas Station' },
@@ -59,7 +68,15 @@ const CatchmentSidebar = ({
     { value: 'supermarket', label: 'Supermarket' }
   ];
 
-  // Handle search submission
+  // Travel mode options
+  const travelModeOptions = [
+    { value: 'driving', label: 'Driving', icon: '🚗' },
+    { value: 'walking', label: 'Walking', icon: '🚶' },
+    { value: 'bicycling', label: 'Bicycling', icon: '🚴' },
+    { value: 'transit', label: 'Transit', icon: '🚌' }
+  ];
+
+  // Handle places search submission
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (onSearch) {
@@ -68,6 +85,34 @@ const CatchmentSidebar = ({
         category: getAllSectors ? null : category,
         getAllSectors
       });
+    }
+  };
+
+  // Handle catchment calculation submission
+  const handleCatchmentSubmit = (e) => {
+    e.preventDefault();
+    if (onCatchmentCalculate) {
+      onCatchmentCalculate({
+        travelMode,
+        driveTimes,
+        showDemographics
+      });
+    }
+  };
+
+  // Add custom time to drive times
+  const addCustomTime = () => {
+    const time = parseInt(customTime);
+    if (time > 0 && time <= 60 && !driveTimes.includes(time)) {
+      setDriveTimes([...driveTimes, time].sort((a, b) => a - b));
+      setCustomTime('');
+    }
+  };
+
+  // Remove time from drive times
+  const removeTime = (timeToRemove) => {
+    if (driveTimes.length > 1) {
+      setDriveTimes(driveTimes.filter(time => time !== timeToRemove));
     }
   };
 
@@ -158,7 +203,7 @@ const CatchmentSidebar = ({
         <div style={styles.headerContent}>
           <img src={logo} alt="CBRE" style={styles.logo} />
           <h4 style={styles.title}>
-            {currentLayer === 'catchment' ? 'CATCHMENT' : 'COMMUNE'}
+            {showCatchmentMode ? 'CATCHMENT ANALYSIS' : 'PLACES SEARCH'}
           </h4>
         </div>
         <button style={styles.closeButton} onClick={onClose}>
@@ -166,13 +211,8 @@ const CatchmentSidebar = ({
         </button>
       </div>
 
-      {/* Search Section */}
-      <div style={styles.searchSection}>
-        <h5 style={styles.sectionTitle}>
-          🔍 Place Search
-        </h5>
-        
-        {/* Location Status */}
+      {/* Location Status */}
+      <div style={styles.locationSection}>
         {selectedLocation ? (
           <div style={styles.locationStatus}>
             📍 Location: {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
@@ -182,75 +222,188 @@ const CatchmentSidebar = ({
             ⚠️ Click on the map to select a location
           </div>
         )}
+      </div>
 
-        {/* Search Form */}
-        <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Search Radius:</label>
-            <select
-              value={radius}
-              onChange={(e) => setRadius(e.target.value)}
-              style={styles.select}
-            >
-              {radiusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Content based on mode */}
+      {showCatchmentMode ? (
+        // CATCHMENT MODE
+        <div style={styles.searchSection}>
+          <h5 style={styles.sectionTitle}>
+            🎯 Catchment Parameters
+          </h5>
 
-          <div style={styles.formGroup}>
-            <label style={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={getAllSectors}
-                onChange={(e) => setGetAllSectors(e.target.checked)}
-                style={styles.checkbox}
-              />
-              Get All Sectors
-            </label>
-          </div>
-
-          {!getAllSectors && (
+          <form onSubmit={handleCatchmentSubmit} style={styles.searchForm}>
+            {/* Travel Mode Selection */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Category:</label>
+              <label style={styles.label}>Travel Mode:</label>
+              <div style={styles.travelModeGrid}>
+                {travelModeOptions.map(mode => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setTravelMode(mode.value)}
+                    style={{
+                      ...styles.travelModeButton,
+                      ...(travelMode === mode.value ? styles.travelModeButtonActive : {})
+                    }}
+                  >
+                    <span style={styles.modeIcon}>{mode.icon}</span>
+                    <span style={styles.modeLabel}>{mode.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Drive Times */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Drive Times (minutes):</label>
+              <div style={styles.timeChips}>
+                {driveTimes.map(time => (
+                  <div key={time} style={styles.timeChip}>
+                    <span>{time}min</span>
+                    {driveTimes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeTime(time)}
+                        style={styles.removeTimeButton}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              <div style={styles.addTimeContainer}>
+                <input
+                  type="number"
+                  value={customTime}
+                  onChange={(e) => setCustomTime(e.target.value)}
+                  placeholder="Add time (1-60)"
+                  min="1"
+                  max="60"
+                  style={styles.timeInput}
+                />
+                <button
+                  type="button"
+                  onClick={addCustomTime}
+                  disabled={!customTime || customTime < 1 || customTime > 60}
+                  style={styles.addTimeButton}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Demographics Option */}
+            <div style={styles.formGroup}>
+              <label style={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={showDemographics}
+                  onChange={(e) => setShowDemographics(e.target.checked)}
+                  style={styles.checkbox}
+                />
+                Include demographic data
+              </label>
+            </div>
+
+            {/* Calculate Button */}
+            <button
+              type="submit"
+              disabled={!selectedLocation || isLoading || driveTimes.length === 0}
+              style={{
+                ...styles.calculateButton,
+                ...((!selectedLocation || isLoading || driveTimes.length === 0) ? styles.disabledButton : {})
+              }}
+            >
+              {isLoading ? 'Calculating...' : 'Calculate Catchment'}
+            </button>
+          </form>
+
+          {/* Results Summary */}
+          {catchmentData && catchmentData.length > 0 && (
+            <div style={styles.resultsInfo}>
+              ✅ Generated {catchmentData.length} catchment area{catchmentData.length !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+      ) : (
+        // PLACES MODE
+        <div style={styles.searchSection}>
+          <h5 style={styles.sectionTitle}>
+            🔍 Place Search
+          </h5>
+
+          {/* Search Form */}
+          <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Search Radius:</label>
               <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                value={radius}
+                onChange={(e) => setRadius(e.target.value)}
                 style={styles.select}
               >
-                {categories.map(cat => (
-                  <option key={cat.value} value={cat.value}>
-                    {getCategoryEmoji(cat.value)} {cat.label}
+                {radiusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={getAllSectors}
+                  onChange={(e) => setGetAllSectors(e.target.checked)}
+                  style={styles.checkbox}
+                />
+                Get All Sectors
+              </label>
+            </div>
+
+            {!getAllSectors && (
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Category:</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  style={styles.select}
+                >
+                  {categories.map(cat => (
+                    <option key={cat.value} value={cat.value}>
+                      {getCategoryEmoji(cat.value)} {cat.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={!selectedLocation || isLoading}
+              style={{
+                ...styles.searchButton,
+                ...((!selectedLocation || isLoading) ? styles.disabledButton : {})
+              }}
+            >
+              {isLoading ? 'Searching...' : 'Search Places'}
+            </button>
+          </form>
+
+          {/* Results Summary */}
+          {resultsCount > 0 && (
+            <div style={styles.resultsInfo}>
+              Found {resultsCount} place{resultsCount !== 1 ? 's' : ''}
+            </div>
           )}
+        </div>
+      )}
 
-          <button
-            type="submit"
-            disabled={!selectedLocation || isLoading}
-            style={{
-              ...styles.searchButton,
-              ...((!selectedLocation || isLoading) ? styles.disabledButton : {})
-            }}
-          >
-            {isLoading ? 'Searching...' : 'Search Places'}
-          </button>
-        </form>
-
-        {/* Results Summary */}
-        {resultsCount > 0 && (
-          <div style={styles.resultsInfo}>
-            Found {resultsCount} place{resultsCount !== 1 ? 's' : ''}
-          </div>
-        )}
-      </div>
-
-      {/* Places Section (when places are available) */}
-      {places && places.length > 0 && (
+      {/* Places List - Only show in places mode */}
+      {!showCatchmentMode && places && places.length > 0 && (
         <div style={styles.placesSection}>
           <h5 style={styles.sectionTitle}>
             <span style={styles.placesIcon}>📍</span>
@@ -384,46 +537,13 @@ const CatchmentSidebar = ({
           </div>
         </div>
       )}
-
-      {/* Category Legend (when places are visible) */}
-      {places && places.length > 0 && placeTypes.length > 1 && (
-        <div style={styles.legendSection}>
-          <h5 style={styles.sectionTitle}>Category Legend:</h5>
-          <div style={styles.legendGrid}>
-            {placeTypes.slice(0, 8).map(type => (
-              <div key={type} style={styles.legendItem}>
-                <div 
-                  style={{
-                    ...styles.legendIcon,
-                    backgroundColor: getCategoryColor(type)
-                  }}
-                >
-                  <span style={styles.legendEmoji}>
-                    {getCategoryEmoji(type)}
-                  </span>
-                </div>
-                <span style={styles.legendLabel}>
-                  {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </span>
-              </div>
-            ))}
-            {placeTypes.length > 8 && (
-              <div style={styles.legendItem}>
-                <span style={styles.legendMore}>
-                  +{placeTypes.length - 8} more
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
 const styles = {
   sidebar: {
-    width: '350px',
+    width: '380px',
     height: '100vh',
     backgroundColor: '#032842',
     color: 'white',
@@ -451,7 +571,7 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 'bold',
     color: 'white'
   },
@@ -462,6 +582,27 @@ const styles = {
     fontSize: '18px',
     cursor: 'pointer',
     padding: '5px'
+  },
+  locationSection: {
+    padding: '15px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.1)'
+  },
+  locationStatus: {
+    fontSize: '12px',
+    color: '#17E88F',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(23, 232, 143, 0.1)',
+    borderRadius: '4px',
+    border: '1px solid rgba(23, 232, 143, 0.3)'
+  },
+  locationWarning: {
+    fontSize: '12px',
+    color: '#f39c12',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+    borderRadius: '4px',
+    border: '1px solid rgba(243, 156, 18, 0.3)'
   },
   searchSection: {
     padding: '20px',
@@ -480,24 +621,6 @@ const styles = {
   placesIcon: {
     fontSize: '16px'
   },
-  locationStatus: {
-    fontSize: '12px',
-    color: '#17E88F',
-    marginBottom: '15px',
-    padding: '8px 12px',
-    backgroundColor: 'rgba(23, 232, 143, 0.1)',
-    borderRadius: '4px',
-    border: '1px solid rgba(23, 232, 143, 0.3)'
-  },
-  locationWarning: {
-    fontSize: '12px',
-    color: '#f39c12',
-    marginBottom: '15px',
-    padding: '8px 12px',
-    backgroundColor: 'rgba(243, 156, 18, 0.1)',
-    borderRadius: '4px',
-    border: '1px solid rgba(243, 156, 18, 0.3)'
-  },
   searchForm: {
     display: 'flex',
     flexDirection: 'column',
@@ -506,7 +629,7 @@ const styles = {
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px'
+    gap: '8px'
   },
   label: {
     fontSize: '13px',
@@ -534,10 +657,104 @@ const styles = {
   checkbox: {
     cursor: 'pointer'
   },
+  travelModeGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px'
+  },
+  travelModeButton: {
+    padding: '10px 6px',
+    border: '2px solid rgba(255,255,255,0.3)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: 'white',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px'
+  },
+  travelModeButtonActive: {
+    borderColor: '#17E88F',
+    backgroundColor: 'rgba(23, 232, 143, 0.2)'
+  },
+  modeIcon: {
+    fontSize: '18px'
+  },
+  modeLabel: {
+    fontSize: '11px',
+    fontWeight: '500'
+  },
+  timeChips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginBottom: '10px'
+  },
+  timeChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 8px',
+    backgroundColor: '#17E88F',
+    color: '#032842',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: '500'
+  },
+  removeTimeButton: {
+    background: 'none',
+    border: 'none',
+    color: '#032842',
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: '0',
+    width: '16px',
+    height: '16px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  addTimeContainer: {
+    display: 'flex',
+    gap: '6px'
+  },
+  timeInput: {
+    flex: 1,
+    padding: '6px 8px',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '4px',
+    fontSize: '12px',
+    outline: 'none',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: 'white'
+  },
+  addTimeButton: {
+    padding: '6px 10px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
   searchButton: {
     padding: '12px 20px',
     backgroundColor: '#17E88F',
     color: '#032842',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s'
+  },
+  calculateButton: {
+    padding: '12px 20px',
+    backgroundColor: '#28a745',
+    color: 'white',
     border: 'none',
     borderRadius: '4px',
     fontSize: '14px',
@@ -553,7 +770,7 @@ const styles = {
     fontSize: '12px',
     color: '#17E88F',
     fontWeight: 'bold',
-    marginTop: '10px',
+    marginTop: '15px',
     padding: '8px 12px',
     backgroundColor: 'rgba(23, 232, 143, 0.1)',
     borderRadius: '4px',
@@ -701,45 +918,6 @@ const styles = {
     cursor: 'pointer',
     fontSize: '12px',
     marginTop: '10px'
-  },
-  legendSection: {
-    padding: '15px 20px',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.2)'
-  },
-  legendGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px'
-  },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  legendIcon: {
-    width: '20px',
-    height: '20px',
-    borderRadius: '10px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  legendEmoji: {
-    fontSize: '10px'
-  },
-  legendLabel: {
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.8)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  },
-  legendMore: {
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.6)',
-    fontStyle: 'italic'
   }
 };
 

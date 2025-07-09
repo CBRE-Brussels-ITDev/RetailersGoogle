@@ -86,15 +86,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
             }
             
             // If no marker was clicked, treat as map click
-            // Clear existing circle when new location is selected
-            if (circleGraphic.current) {
-              graphicsLayer.current.remove(circleGraphic.current);
-              circleGraphic.current = null;
-            }
-
-            // Clear catchment polygons when new location is selected
-            clearCatchmentPolygons();
-
+            // Don't clear catchment polygons when clicking map - let user choose
             if (onMapClick) {
               onMapClick(latitude, longitude);
             }
@@ -121,6 +113,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   // Helper function to clear catchment polygons
   const clearCatchmentPolygons = () => {
     if (graphicsLayer.current && catchmentGraphics.current.length > 0) {
+      console.log('Clearing catchment polygons:', catchmentGraphics.current.length);
       catchmentGraphics.current.forEach(graphic => {
         graphicsLayer.current.remove(graphic);
       });
@@ -180,9 +173,19 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     },
 
     async addCatchmentPolygons(catchmentData) {
-      if (!mapView.current || !graphicsLayer.current) return;
+      if (!mapView.current || !graphicsLayer.current) {
+        console.error('Map view or graphics layer not available');
+        return;
+      }
+
+      if (!catchmentData || catchmentData.length === 0) {
+        console.warn('No catchment data provided');
+        return;
+      }
 
       try {
+        console.log('Adding catchment polygons, count:', catchmentData.length);
+        
         const [Graphic, Polygon, SimpleFillSymbol, SimpleLineSymbol, TextSymbol] = await Promise.all([
           import('@arcgis/core/Graphic'),
           import('@arcgis/core/geometry/Polygon'),
@@ -196,18 +199,21 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
         // Colors for different drive times with better visibility
         const colors = [
-          { fill: [0, 123, 255, 0.25], stroke: [0, 123, 255, 0.8] },      // Blue for first time
-          { fill: [255, 193, 7, 0.25], stroke: [255, 193, 7, 0.8] },      // Amber for second time
-          { fill: [220, 53, 69, 0.25], stroke: [220, 53, 69, 0.8] },      // Red for third time
-          { fill: [40, 167, 69, 0.25], stroke: [40, 167, 69, 0.8] },      // Green for fourth time
-          { fill: [102, 16, 242, 0.25], stroke: [102, 16, 242, 0.8] },    // Purple for fifth time
-          { fill: [255, 99, 132, 0.25], stroke: [255, 99, 132, 0.8] }     // Pink for sixth time
+          { fill: [0, 123, 255, 0.3], stroke: [0, 123, 255, 0.9] },      // Blue for first time
+          { fill: [255, 193, 7, 0.3], stroke: [255, 193, 7, 0.9] },      // Amber for second time
+          { fill: [220, 53, 69, 0.3], stroke: [220, 53, 69, 0.9] },      // Red for third time
+          { fill: [40, 167, 69, 0.3], stroke: [40, 167, 69, 0.9] },      // Green for fourth time
+          { fill: [102, 16, 242, 0.3], stroke: [102, 16, 242, 0.9] },    // Purple for fifth time
+          { fill: [255, 99, 132, 0.3], stroke: [255, 99, 132, 0.9] }     // Pink for sixth time
         ];
 
-        console.log('Adding catchment polygons:', catchmentData);
+        let addedCount = 0;
 
-        catchmentData.forEach((catchment, index) => {
-          if (catchment.geometry && catchment.geometry.coordinates) {
+        for (let index = 0; index < catchmentData.length; index++) {
+          const catchment = catchmentData[index];
+          console.log(`Processing catchment ${index + 1}: ${catchment.name}`, catchment.geometry);
+          
+          if (catchment.geometry && catchment.geometry.coordinates && catchment.geometry.coordinates.length > 0) {
             try {
               // Create polygon from coordinates
               const polygon = new Polygon.default({
@@ -215,12 +221,14 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
                 spatialReference: mapView.current.spatialReference
               });
 
+              console.log('Created polygon for:', catchment.name);
+
               const color = colors[index % colors.length];
               const fillSymbol = new SimpleFillSymbol.default({
                 color: color.fill,
                 outline: new SimpleLineSymbol.default({
                   color: color.stroke,
-                  width: 2,
+                  width: 3,
                   style: 'solid'
                 })
               });
@@ -237,19 +245,20 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
               graphicsLayer.current.add(graphic);
               catchmentGraphics.current.push(graphic);
+              addedCount++;
 
               // Add label in the center of the polygon
               const centroid = polygon.centroid;
               if (centroid) {
                 const labelSymbol = new TextSymbol.default({
-                  color: color.stroke,
-                  haloColor: "white",
+                  color: "white",
+                  haloColor: color.stroke,
                   haloSize: 2,
                   text: catchment.name,
                   xoffset: 0,
                   yoffset: 0,
                   font: {
-                    size: 14,
+                    size: 16,
                     family: "Arial",
                     weight: "bold"
                   }
@@ -259,7 +268,8 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
                   geometry: centroid,
                   symbol: labelSymbol,
                   attributes: {
-                    type: 'catchment-label'
+                    type: 'catchment-label',
+                    driveTime: catchment.name
                   }
                 });
 
@@ -270,10 +280,22 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
             } catch (error) {
               console.error('Error creating polygon for catchment:', catchment.name, error);
             }
+          } else {
+            console.warn('Invalid geometry for catchment:', catchment.name);
           }
-        });
+        }
 
-        console.log(`Added ${catchmentGraphics.current.length} catchment graphics`);
+        console.log(`Successfully added ${addedCount} catchment polygons with ${catchmentGraphics.current.length} total graphics`);
+
+        // Zoom to the extent of all catchment polygons
+        if (catchmentGraphics.current.length > 0) {
+          const polygonGraphics = catchmentGraphics.current.filter(g => g.attributes.type === 'catchment');
+          if (polygonGraphics.length > 0) {
+            const allGeometries = polygonGraphics.map(g => g.geometry);
+            const extent = await mapView.current.extent;
+            // You could add auto-zoom here if needed
+          }
+        }
 
       } catch (error) {
         console.error('Error adding catchment polygons:', error);
@@ -378,9 +400,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         color: [255, 0, 0, 1], // Bright red for better visibility
         outline: {
           color: [255, 255, 255, 1],
-          width: 3
+          width: 4
         },
-        size: 16,
+        size: 20,
         style: 'circle'
       });
 
@@ -531,7 +553,22 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         padding: 0
       }}
     >
-      
+      {/* Minimal loading indicator */}
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 1000,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        color: 'white',
+        padding: '20px',
+        borderRadius: '8px',
+        fontSize: '14px',
+        display: mapView.current ? 'none' : 'block'
+      }}>
+        Loading Map...
+      </div>
     </div>
   );
 });
