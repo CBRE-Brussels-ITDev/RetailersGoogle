@@ -3,7 +3,7 @@ const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
-const PORT = 5001;
+const PORT = process.env.PORT || 8080; // Use port 8080 or environment variable
 
 app.use(cors());
 // Increase body parser limit to handle large payloads (map screenshots)

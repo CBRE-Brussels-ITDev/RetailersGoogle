@@ -1,7 +1,7 @@
 // Updated src/services/GooglePlaces.jsx
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
 const GooglePlacesService = {
     // Existing methods...
