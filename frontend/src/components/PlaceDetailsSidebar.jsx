@@ -371,7 +371,9 @@ const styles = {
         flexDirection: 'column',
         boxShadow: '-2px 0 10px rgba(0, 0, 0, 0.1)',
         zIndex: 1000,
-        position: 'relative',
+        position: 'fixed',
+        right: 0,
+        top: 0,
         overflow: 'hidden'
     },
     header: {

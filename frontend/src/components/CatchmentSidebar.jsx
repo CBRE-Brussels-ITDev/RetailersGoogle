@@ -2,6 +2,16 @@ import React, { useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 import logo from '../assets/CBRE_white.svg';
 
+// Catchment colors matching JSReport template
+const getCatchmentColor = (index) => {
+  const colors = [
+    'rgb(114, 151, 153)', // First catchment
+    'rgb(139, 169, 171)', // Second catchment  
+    'rgb(176, 195, 196)'  // Third catchment
+  ];
+  return colors[index] || colors[0];
+};
+
 const CatchmentSidebar = ({ 
   visible, 
   places, 
@@ -14,7 +24,10 @@ const CatchmentSidebar = ({
   onCatchmentCalculate,
   resultsCount,
   showCatchmentMode,
-  catchmentData
+  catchmentData,
+  onClearAll,
+  onToggleMode,
+  onGeneratePDF
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -27,7 +40,7 @@ const CatchmentSidebar = ({
 
   // Catchment form state
   const [travelMode, setTravelMode] = useState('driving');
-  const [driveTimes, setDriveTimes] = useState([15, 30, 45]);
+  const [driveTimes, setDriveTimes] = useState([10, 20, 30]); // Max 3 catchments
   const [customTime, setCustomTime] = useState('');
   const [showDemographics, setShowDemographics] = useState(true);
 
@@ -103,9 +116,11 @@ const CatchmentSidebar = ({
   // Add custom time to drive times
   const addCustomTime = () => {
     const time = parseInt(customTime);
-    if (time > 0 && time <= 60 && !driveTimes.includes(time)) {
+    if (time > 0 && time <= 60 && !driveTimes.includes(time) && driveTimes.length < 3) {
       setDriveTimes([...driveTimes, time].sort((a, b) => a - b));
       setCustomTime('');
+    } else if (driveTimes.length >= 3) {
+      alert('Maximum 3 catchment areas allowed');
     }
   };
 
@@ -202,13 +217,39 @@ const CatchmentSidebar = ({
       <div style={styles.header}>
         <div style={styles.headerContent}>
           <img src={logo} alt="CBRE" style={styles.logo} />
-          <h4 style={styles.title}>
-            {showCatchmentMode ? 'CATCHMENT ANALYSIS' : 'PLACES SEARCH'}
-          </h4>
+          <div style={styles.titleContainer}>
+            <h4 style={styles.title}>
+              {showCatchmentMode ? 'CATCHMENT ANALYSIS' : 'PLACES SEARCH'}
+            </h4>
+            <button
+              onClick={onToggleMode}
+              style={{
+                ...styles.toggleModeButton,
+                backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545'
+              }}
+            >
+              {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
+            </button>
+          </div>
         </div>
-        <button style={styles.closeButton} onClick={onClose}>
-          ✕
-        </button>
+        <div style={styles.headerButtons}>
+          {/* PDF Generation Button - Only in catchment mode */}
+          {showCatchmentMode && catchmentData?.length > 0 && (
+            <button
+              onClick={onGeneratePDF}
+              disabled={isLoading}
+              style={{
+                ...styles.pdfButton,
+                opacity: isLoading ? 0.6 : 1
+              }}
+            >
+              📄 PDF
+            </button>
+          )}
+          <button style={styles.closeButton} onClick={onClose}>
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Location Status */}
@@ -256,10 +297,13 @@ const CatchmentSidebar = ({
 
             {/* Drive Times */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Drive Times (minutes):</label>
+              <label style={styles.label}>Drive Times (minutes) - Max 3:</label>
               <div style={styles.timeChips}>
-                {driveTimes.map(time => (
-                  <div key={time} style={styles.timeChip}>
+                {driveTimes.map((time, index) => (
+                  <div key={time} style={{
+                    ...styles.timeChip,
+                    backgroundColor: getCatchmentColor(index)
+                  }}>
                     <span>{time}min</span>
                     {driveTimes.length > 1 && (
                       <button
@@ -279,18 +323,25 @@ const CatchmentSidebar = ({
                   type="number"
                   value={customTime}
                   onChange={(e) => setCustomTime(e.target.value)}
-                  placeholder="Add time (1-60)"
+                  placeholder={driveTimes.length >= 3 ? "Max 3 areas" : "Add time (1-60)"}
                   min="1"
                   max="60"
-                  style={styles.timeInput}
+                  style={{
+                    ...styles.timeInput,
+                    opacity: driveTimes.length >= 3 ? 0.5 : 1
+                  }}
+                  disabled={driveTimes.length >= 3}
                 />
                 <button
                   type="button"
                   onClick={addCustomTime}
-                  disabled={!customTime || customTime < 1 || customTime > 60}
-                  style={styles.addTimeButton}
+                  disabled={!customTime || customTime < 1 || customTime > 60 || driveTimes.length >= 3}
+                  style={{
+                    ...styles.addTimeButton,
+                    opacity: (driveTimes.length >= 3) ? 0.5 : 1
+                  }}
                 >
-                  Add
+                  {driveTimes.length >= 3 ? 'Max' : 'Add'}
                 </button>
               </div>
             </div>
@@ -326,6 +377,16 @@ const CatchmentSidebar = ({
             <div style={styles.resultsInfo}>
               ✅ Generated {catchmentData.length} catchment area{catchmentData.length !== 1 ? 's' : ''}
             </div>
+          )}
+
+          {/* Clear Button - Only show if there's data to clear */}
+          {(catchmentData?.length > 0 || selectedLocation) && (
+            <button
+              onClick={onClearAll}
+              style={styles.clearButton}
+            >
+              🗑️ Clear All
+            </button>
           )}
         </div>
       ) : (
@@ -398,6 +459,16 @@ const CatchmentSidebar = ({
             <div style={styles.resultsInfo}>
               Found {resultsCount} place{resultsCount !== 1 ? 's' : ''}
             </div>
+          )}
+
+          {/* Clear Button - Only show if there's data to clear */}
+          {(resultsCount > 0 || selectedLocation) && (
+            <button
+              onClick={onClearAll}
+              style={styles.clearButton}
+            >
+              🗑️ Clear All
+            </button>
           )}
         </div>
       )}
@@ -550,9 +621,12 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     fontFamily: 'Arial, sans-serif',
-    zIndex: 1000,
-    position: 'relative',
-    overflow: 'hidden'
+    zIndex: 1500, // Higher z-index to appear above map
+    position: 'fixed', // Fixed positioning to overlay the map
+    top: 0,
+    left: 0,
+    overflow: 'hidden',
+    boxShadow: '2px 0 10px rgba(0,0,0,0.3)' // Add shadow for better visual separation
   },
   header: {
     padding: '20px',
@@ -564,16 +638,46 @@ const styles = {
   headerContent: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px'
+    gap: '10px',
+    flex: 1
+  },
+  titleContainer: {
+    flex: 1
   },
   logo: {
     height: '20px'
   },
   title: {
-    margin: 0,
-    fontSize: '16px',
+    margin: '0 0 5px 0',
+    fontSize: '14px',
     fontWeight: 'bold',
     color: 'white'
+  },
+  toggleModeButton: {
+    padding: '4px 8px',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease'
+  },
+  headerButtons: {
+    display: 'flex',
+    gap: '5px',
+    alignItems: 'center'
+  },
+  pdfButton: {
+    padding: '6px 10px',
+    backgroundColor: '#e74c3c',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease'
   },
   closeButton: {
     background: 'none',
@@ -918,6 +1022,19 @@ const styles = {
     cursor: 'pointer',
     fontSize: '12px',
     marginTop: '10px'
+  },
+  clearButton: {
+    padding: '10px 16px',
+    backgroundColor: '#f39c12',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+    marginTop: '15px',
+    width: '100%',
+    transition: 'background-color 0.2s'
   }
 };
 

@@ -6,7 +6,9 @@ const app = express();
 const PORT = 5001;
 
 app.use(cors());
-app.use(express.json());
+// Increase body parser limit to handle large payloads (map screenshots)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Move API key to environment variable for security
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA1r8V5FSaYFvmS8FwnGxA6DwXhnHUvHUc";
@@ -313,14 +315,20 @@ app.post('/calculate-catchment', async (req, res) => {
         });
     }
 
+    // Limit to maximum 3 catchment areas
+    const limitedDriveTimes = driveTimes.slice(0, 3);
+    if (driveTimes.length > 3) {
+        console.log(`Drive times limited from ${driveTimes.length} to 3 catchments`);
+    }
+
     try {
-        console.log('Calculating catchment for:', { location, travelMode, driveTimes });
+        console.log('Calculating catchment for:', { location, travelMode, driveTimes: limitedDriveTimes });
         
         // Simulate processing time for realistic experience
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Generate enhanced catchment results
-        const catchmentResults = driveTimes.map((driveTime, index) => {
+        // Generate enhanced catchment results (max 3)
+        const catchmentResults = limitedDriveTimes.map((driveTime, index) => {
             // More sophisticated population calculation based on drive time and location
             const basePopulation = calculatePopulationForArea(location, driveTime, travelMode);
             const demographics = generateDemographicData(basePopulation, location);
@@ -337,7 +345,8 @@ app.post('/calculate-catchment', async (req, res) => {
                 metadata: {
                     calculatedAt: new Date().toISOString(),
                     averageSpeed: getAverageSpeed(travelMode),
-                    accessibility: calculateAccessibility(travelMode, driveTime)
+                    accessibility: calculateAccessibility(travelMode, driveTime),
+                    catchmentIndex: index // For color mapping
                 }
             };
         });
@@ -359,6 +368,160 @@ app.post('/calculate-catchment', async (req, res) => {
         res.status(500).json({ 
             error: 'Error calculating catchment',
             details: error.message 
+        });
+    }
+});
+
+// Helper function to format numbers with dots (German style)
+function numberWithDot(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+// Function to process catchment data like the original getGlobalsVariables
+function getGlobalsVariables(currentCatchment) {
+    let name = `${currentCatchment.number || currentCatchment.driveTime} minutes`;
+    let totalPopulation = parseInt(currentCatchment.totalMale + currentCatchment.totalFemale);
+    let pourcentWomen = parseFloat(((currentCatchment.totalFemale / totalPopulation) * 100).toFixed(0));
+    let pourcentMan = parseFloat(((currentCatchment.totalMale / totalPopulation) * 100).toFixed(0));
+
+    let pourcentAge0014 = parseFloat(((currentCatchment.totalAGE0014 / totalPopulation) * 100).toFixed(0));
+    let pourcentAge1529 = parseFloat(((currentCatchment.totalAGE1529 / totalPopulation) * 100).toFixed(0));
+    let pourcentAge3044 = parseFloat(((currentCatchment.totalAGE3044 / totalPopulation) * 100).toFixed(0));
+    let pourcentAge4559 = parseFloat(((currentCatchment.totalAGE4559 / totalPopulation) * 100).toFixed(0));
+    let pourcentAge60PL = parseFloat(((currentCatchment.totalAGE60PL / totalPopulation) * 100).toFixed(0));
+
+    let householdsMember = numberWithDot(parseFloat((totalPopulation / currentCatchment.totalHH_T).toFixed(1)));
+    let totalHouseHolds = numberWithDot(parseFloat(currentCatchment.totalHH_T.toFixed(0)));
+    let totalMIO = new Intl.NumberFormat("de-DE").format(parseFloat(currentCatchment.totalPP_MIO.toFixed(0)));
+    let purchasePowerPerson = numberWithDot(((currentCatchment.totalPP_MIO * 1000000) / totalPopulation).toFixed(0));
+
+    const catchementData = {
+        name,
+        totalPopulation,
+        pourcentMan,
+        pourcentWomen,
+        pourcentAge0014,
+        pourcentAge1529,
+        pourcentAge3044,
+        pourcentAge4559,
+        pourcentAge60PL,
+        totalHouseHolds,
+        householdsMember,
+        totalMIO,
+        purchasePowerPerson,
+    };
+    return catchementData;
+}
+
+// NEW: JSReport PDF Generation endpoint
+app.post('/generate-catchment-report', async (req, res) => {
+    console.log('PDF Generation endpoint called');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    const { catchmentData, address, imageUrl, timestamp, timeOfDay } = req.body;
+
+    if (!catchmentData || !Array.isArray(catchmentData) || catchmentData.length === 0) {
+        console.log('Invalid catchmentData:', catchmentData);
+        return res.status(400).json({ 
+            error: 'catchmentData array is required and must not be empty' 
+        });
+    }
+
+    try {
+        console.log('Generating PDF using JSReport for catchment data:', catchmentData.length, 'areas');
+        console.log('Sample catchment area data:', JSON.stringify(catchmentData[0], null, 2));
+        
+        // Transform catchment data to match the expected JSReport structure
+        const defaultBreaks = catchmentData.map((area, index) => {
+            console.log(`Processing area ${index}:`, JSON.stringify(area, null, 2));
+            
+            // Ensure we have all required fields with proper defaults
+            const totalPopulation = area.totalPopulation || 0;
+            const pourcentMan = area.pourcentMan || 49;
+            const pourcentWomen = area.pourcentWomen || 51;
+            const pourcentAge0014 = area.pourcentAge0014 || 14;
+            const pourcentAge1529 = area.pourcentAge1529 || 17;
+            const pourcentAge3044 = area.pourcentAge3044 || 18;
+            const pourcentAge4559 = area.pourcentAge4559 || 22; // Add missing age group
+            const pourcentAge60PL = area.pourcentAge60PL || 28;
+            const totalHouseHolds = area.totalHouseHolds || Math.floor(totalPopulation / 2.3);
+            const householdsMember = parseFloat(area.householdsMember) || 2.3;
+            const totalMIO = area.totalMIO || ((area.purchasePowerPerson || 21621) * totalPopulation) / 1000000;
+            const purchasePowerPerson = area.purchasePowerPerson || 21621;
+
+            const processedBreak = {
+                name: `${area.driveTime || area.number || 15} minutes`,
+                totalPopulation: totalPopulation,
+                pourcentMan: Math.round(pourcentMan),
+                pourcentWomen: Math.round(pourcentWomen),
+                pourcentAge0014: Math.round(pourcentAge0014),
+                pourcentAge1529: Math.round(pourcentAge1529),
+                pourcentAge3044: Math.round(pourcentAge3044),
+                pourcentAge4559: Math.round(pourcentAge4559), // Include the missing age group
+                pourcentAge60PL: Math.round(pourcentAge60PL),
+                totalHouseHolds: totalHouseHolds,
+                householdsMember: householdsMember,
+                totalMIO: totalMIO,
+                purchasePowerPerson: purchasePowerPerson.toString()
+            };
+            
+            console.log(`Processed break ${index}:`, JSON.stringify(processedBreak, null, 2));
+            return processedBreak;
+        });
+
+        // Format the date properly
+        const formattedDate = new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+
+        // Prepare request body for JSReport with exact structure
+        const requestBody = {
+            template: { shortid: "4HTixpM" },
+            data: {
+                date: formattedDate, // Format: "15/09/2022"
+                url: imageUrl || "https://media.wired.com/photos/59269cd37034dc5f91bec0f1/191:100/w_1280,c_limit/GoogleMapTA.jpg", // Map image URL
+                defaultBreaks: defaultBreaks
+            }
+        };
+
+        console.log('Sending request to JSReport with structured data:', JSON.stringify(requestBody, null, 2));
+
+        // Make request to JSReport Online
+        const response = await axios.post("https://cbrereport.jsreportonline.net/api/report", requestBody, {
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Basic YmUtaXRkZXZAY2JyZS5jb206V2F0ZXJsb28xNio=`,
+            },
+            responseType: 'arraybuffer',
+            timeout: 30000 // 30 second timeout
+        });
+
+        if (response.status !== 200) {
+            throw new Error(`JSReport error! status: ${response.status}`);
+        }
+
+        // Set response headers for PDF download
+        const filename = `CBRE_CATCHMENT_${new Date().toISOString().slice(0, 10)}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        // Send the PDF data
+        res.send(Buffer.from(response.data));
+        
+        console.log('PDF generated successfully using JSReport');
+        
+    } catch (error) {
+        console.error('Error generating PDF with JSReport:');
+        console.error('Error message:', error.message);
+        console.error('Error response:', error.response?.data?.toString() || 'No response data');
+        console.error('Error status:', error.response?.status || 'No status');
+        
+        res.status(500).json({ 
+            error: 'Error generating PDF report',
+            details: error.message,
+            jsreportError: error.response?.data?.toString() || null
         });
     }
 });
@@ -423,22 +586,46 @@ function generateDemographicData(population, location) {
     const womenPercentage = 48 + (Math.random() * 4) + (urbanFactor > 1.5 ? 2 : 0);
     const menPercentage = 100 - womenPercentage;
     
+    // Calculate actual numbers (not percentages)
+    const totalFemale = Math.floor(population * (womenPercentage / 100));
+    const totalMale = population - totalFemale;
+    
     // Age distribution varies by urban/rural
     const ageDistribution = generateAgeDistribution(urbanFactor);
+    
+    // Calculate actual age numbers
+    const totalAGE0014 = Math.floor(population * (ageDistribution.pourcentAge0014 / 100));
+    const totalAGE1529 = Math.floor(population * (ageDistribution.pourcentAge1529 / 100));
+    const totalAGE3044 = Math.floor(population * (ageDistribution.pourcentAge3044 / 100));
+    const totalAGE4559 = Math.floor(population * (ageDistribution.pourcentAge4559 / 100));
+    const totalAGE60PL = population - (totalAGE0014 + totalAGE1529 + totalAGE3044 + totalAGE4559);
     
     // Economic data
     const householdsCount = Math.floor(population / (2.1 + Math.random() * 0.8));
     const avgHouseholdSize = (population / householdsCount).toFixed(1);
     const purchasePowerPerPerson = Math.floor(25000 + (Math.random() * 20000) + (urbanFactor * 5000));
+    const totalPP_MIO = (population * purchasePowerPerPerson) / 1000000;
     
     return {
+        // Keep original format for display
         pourcentWomen: parseFloat(womenPercentage.toFixed(1)),
         pourcentMan: parseFloat(menPercentage.toFixed(1)),
         ...ageDistribution,
         totalHouseHolds: householdsCount,
         householdsMember: avgHouseholdSize,
-        totalMIO: Math.floor(population * purchasePowerPerPerson / 1000000),
-        purchasePowerPerson: purchasePowerPerPerson
+        totalMIO: Math.floor(totalPP_MIO),
+        purchasePowerPerson: purchasePowerPerPerson,
+        
+        // Add raw numbers for PDF generation
+        totalMale: totalMale,
+        totalFemale: totalFemale,
+        totalAGE0014: totalAGE0014,
+        totalAGE1529: totalAGE1529,
+        totalAGE3044: totalAGE3044,
+        totalAGE4559: totalAGE4559,
+        totalAGE60PL: totalAGE60PL,
+        totalHH_T: householdsCount,
+        totalPP_MIO: totalPP_MIO
     };
 }
 
@@ -535,6 +722,27 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
     return R * c;
 }
 
+// Helper functions for PDF formatting
+function formatNumber(num) {
+    if (num === undefined || num === null || isNaN(num)) return 'N/A';
+    return new Intl.NumberFormat('en-US').format(Math.round(num));
+}
+
+function formatCurrency(num) {
+    if (num === undefined || num === null || isNaN(num)) return 'N/A';
+    return new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: 'EUR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(num);
+}
+
+function formatPercentage(num) {
+    if (num === undefined || num === null || isNaN(num)) return 'N/A';
+    return `${parseFloat(num).toFixed(1)}%`;
+}
+
 // Alternative endpoint for text-based search (gets all types of places)
 app.post('/get-all-places-text-search', async (req, res) => {
     const { lat, lng, radius, query = 'business' } = req.body;
@@ -605,7 +813,8 @@ app.get('/hello', (req, res) => {
             'GET /google-maps/place/:id',
             'POST /get-places-in-radius',
             'POST /get-all-places-text-search',
-            'POST /calculate-catchment'
+            'POST /calculate-catchment',
+            'POST /generate-catchment-report'
         ]
     });
 });
@@ -627,4 +836,5 @@ app.listen(PORT, () => {
     console.log(`  POST /get-places-in-radius - Search places in radius`);
     console.log(`  POST /get-all-places-text-search - Text-based place search`);
     console.log(`  POST /calculate-catchment - Calculate drive time catchment`);
+    console.log(`  POST /generate-catchment-report - Generate PDF report`);
 });

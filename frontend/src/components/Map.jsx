@@ -45,13 +45,17 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         if (!mounted) return;
 
         // Create graphics layer
-        graphicsLayer.current = new GraphicsLayer.default();
+        graphicsLayer.current = new GraphicsLayer.default({
+          title: "Map Graphics"
+        });
 
         // Create map with minimal UI
         const map = new Map.default({
-          basemap: 'dark-gray-vector', // Clean dark basemap
+          basemap: 'gray-vector', // Clean dark basemap
           layers: [graphicsLayer.current]
         });
+
+        console.log('Graphics layer created and added to map');
 
         // Create map view with minimal UI
         mapView.current = new MapView.default({
@@ -71,25 +75,33 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
           }
         });
 
-        // Handle map clicks
-        mapView.current.on('click', (event) => {
-          const { longitude, latitude } = event.mapPoint;
+        // Wait for map to load and then set up click handler
+        mapView.current.when(() => {
+          console.log('Map view loaded successfully');
+          console.log('Map layers:', mapView.current.map.layers.length);
+          console.log('Graphics layer in map:', mapView.current.map.layers.includes(graphicsLayer.current));
           
-          // Check if we clicked on a marker
-          mapView.current.hitTest(event).then((response) => {
-            if (response.results.length > 0) {
-              const graphic = response.results[0].graphic;
-              if (graphic.attributes && graphic.attributes.place_id && onPlaceClick) {
-                onPlaceClick(graphic.attributes.place_id);
-                return;
-              }
-            }
+          // Set up click handler after map loads
+          mapView.current.on('click', (event) => {
+            const { longitude, latitude } = event.mapPoint;
             
-            // If no marker was clicked, treat as map click
-            // Don't clear catchment polygons when clicking map - let user choose
-            if (onMapClick) {
-              onMapClick(latitude, longitude);
-            }
+            console.log('Map clicked - Raw coordinates:', longitude, latitude);
+            
+            // Check if we clicked on a marker
+            mapView.current.hitTest(event).then((response) => {
+              if (response.results.length > 0) {
+                const graphic = response.results[0].graphic;
+                if (graphic.attributes && graphic.attributes.place_id && onPlaceClick) {
+                  onPlaceClick(graphic.attributes.place_id);
+                  return;
+                }
+              }
+              
+              // If no marker was clicked, treat as map click
+              if (onMapClick) {
+                onMapClick(latitude, longitude);
+              }
+            });
           });
         });
 
@@ -108,7 +120,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         mapView.current.destroy();
       }
     };
-  }, [onMapClick]);
+  }, []); // Remove onMapClick dependency to prevent re-initialization
 
   // Helper function to clear catchment polygons
   const clearCatchmentPolygons = () => {
@@ -144,7 +156,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         const centerPoint = new Point.default({
           longitude: center.lng,
           latitude: center.lat,
-          spatialReference: mapView.current.spatialReference
+          spatialReference: {
+            wkid: 4326 // WGS84 for decimal degree coordinates
+          }
         });
 
         // Create circle polygon
@@ -185,6 +199,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
       try {
         console.log('Adding catchment polygons, count:', catchmentData.length);
+        console.log('Graphics layer available:', !!graphicsLayer.current);
+        console.log('Map view available:', !!mapView.current);
+        console.log('Map view spatial reference:', mapView.current?.spatialReference?.wkid);
         
         const [Graphic, Polygon, SimpleFillSymbol, SimpleLineSymbol, TextSymbol] = await Promise.all([
           import('@arcgis/core/Graphic'),
@@ -197,14 +214,14 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         // Clear existing catchment graphics
         clearCatchmentPolygons();
 
-        // Colors for different drive times with better visibility
+        // Colors for different drive times matching JSReport template
+        // 1st catchment: rgb(114, 151, 153)
+        // 2nd catchment: rgb(139, 169, 171) 
+        // 3rd catchment: rgb(176, 195, 196)
         const colors = [
-          { fill: [0, 123, 255, 0.3], stroke: [0, 123, 255, 0.9] },      // Blue for first time
-          { fill: [255, 193, 7, 0.3], stroke: [255, 193, 7, 0.9] },      // Amber for second time
-          { fill: [220, 53, 69, 0.3], stroke: [220, 53, 69, 0.9] },      // Red for third time
-          { fill: [40, 167, 69, 0.3], stroke: [40, 167, 69, 0.9] },      // Green for fourth time
-          { fill: [102, 16, 242, 0.3], stroke: [102, 16, 242, 0.9] },    // Purple for fifth time
-          { fill: [255, 99, 132, 0.3], stroke: [255, 99, 132, 0.9] }     // Pink for sixth time
+          { fill: [114, 151, 153, 0.25], stroke: [114, 151, 153, 0.8] },  // First catchment
+          { fill: [139, 169, 171, 0.25], stroke: [139, 169, 171, 0.8] },  // Second catchment
+          { fill: [176, 195, 196, 0.25], stroke: [176, 195, 196, 0.8] }   // Third catchment
         ];
 
         let addedCount = 0;
@@ -215,20 +232,51 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
           
           if (catchment.geometry && catchment.geometry.coordinates && catchment.geometry.coordinates.length > 0) {
             try {
-              // Create polygon from coordinates
+              // Create polygon from coordinates - handle the specific format from your backend
+              let coordinates = catchment.geometry.coordinates;
+              
+              console.log('Raw coordinates for', catchment.name, ':', coordinates);
+              
+              // Your coordinates are in format: [[[lng, lat], [lng, lat], ...]]
+              // We need to ensure they're properly formatted for ArcGIS
+              let rings;
+              
+              if (Array.isArray(coordinates[0]) && Array.isArray(coordinates[0][0]) && typeof coordinates[0][0][0] === 'number') {
+                // Format: [[[lng, lat], [lng, lat], ...]] - this is what you have
+                rings = coordinates;
+                console.log('Using coordinates as rings directly');
+              } else if (Array.isArray(coordinates[0]) && typeof coordinates[0][0] === 'number') {
+                // Format: [[lng, lat], [lng, lat], ...] - wrap in array
+                rings = [coordinates];
+                console.log('Wrapping coordinates in array for rings');
+              } else {
+                console.error('Unexpected coordinate format:', coordinates);
+                continue;
+              }
+              
               const polygon = new Polygon.default({
-                rings: catchment.geometry.coordinates,
-                spatialReference: mapView.current.spatialReference
+                rings: rings,
+                spatialReference: {
+                  wkid: 4326 // Your coordinates are in WGS84 decimal degrees
+                }
               });
 
-              console.log('Created polygon for:', catchment.name);
+              console.log('Created polygon for:', catchment.name, 'with', rings.length, 'ring(s)', 'and', rings[0]?.length, 'points');
+
+              // Validate the polygon
+              if (!polygon || !polygon.extent) {
+                console.error('Invalid polygon created for:', catchment.name);
+                continue;
+              }
+
+              console.log('Polygon extent:', polygon.extent);
 
               const color = colors[index % colors.length];
               const fillSymbol = new SimpleFillSymbol.default({
                 color: color.fill,
                 outline: new SimpleLineSymbol.default({
                   color: color.stroke,
-                  width: 3,
+                  width: 2, // Thinner, more discrete outline
                   style: 'solid'
                 })
               });
@@ -246,6 +294,14 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
               graphicsLayer.current.add(graphic);
               catchmentGraphics.current.push(graphic);
               addedCount++;
+              
+              console.log(`✅ Successfully added catchment polygon ${addedCount}: ${catchment.name}`);
+              console.log('Graphic added to layer, total graphics on layer:', graphicsLayer.current.graphics.length);
+              console.log('Graphic geometry:', graphic.geometry);
+              console.log('Graphic symbol:', graphic.symbol);
+
+              // Force map to refresh and recognize the new graphic
+              mapView.current.requestUpdate();
 
               // Add label in the center of the polygon
               const centroid = polygon.centroid;
@@ -258,9 +314,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
                   xoffset: 0,
                   yoffset: 0,
                   font: {
-                    size: 16,
+                    size: 12, // Smaller, more discrete text
                     family: "Arial",
-                    weight: "bold"
+                    weight: "normal" // Less bold
                   }
                 });
 
@@ -275,6 +331,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
                 graphicsLayer.current.add(labelGraphic);
                 catchmentGraphics.current.push(labelGraphic);
+                console.log(`Added label for: ${catchment.name} at:`, centroid.longitude, centroid.latitude);
+              } else {
+                console.warn('Could not calculate centroid for:', catchment.name);
               }
 
             } catch (error) {
@@ -287,13 +346,47 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
         console.log(`Successfully added ${addedCount} catchment polygons with ${catchmentGraphics.current.length} total graphics`);
 
-        // Zoom to the extent of all catchment polygons
+        // Force layer visibility and map refresh
+        if (graphicsLayer.current) {
+          graphicsLayer.current.visible = true;
+          console.log('Graphics layer visibility:', graphicsLayer.current.visible);
+          console.log('Graphics layer opacity:', graphicsLayer.current.opacity);
+        }
+
+        // Force map view to update and redraw
+        if (mapView.current) {
+          mapView.current.requestUpdate();
+          console.log('Requested map view update');
+        }
+
+        // Zoom to the extent of all catchment polygons for better visibility
         if (catchmentGraphics.current.length > 0) {
           const polygonGraphics = catchmentGraphics.current.filter(g => g.attributes.type === 'catchment');
           if (polygonGraphics.length > 0) {
-            const allGeometries = polygonGraphics.map(g => g.geometry);
-            const extent = await mapView.current.extent;
-            // You could add auto-zoom here if needed
+            try {
+              // Calculate extent of all polygons
+              let combinedExtent = null;
+              for (const graphic of polygonGraphics) {
+                if (graphic.geometry && graphic.geometry.extent) {
+                  if (combinedExtent === null) {
+                    combinedExtent = graphic.geometry.extent.clone();
+                  } else {
+                    combinedExtent = combinedExtent.union(graphic.geometry.extent);
+                  }
+                }
+              }
+              
+              // Zoom to the combined extent with some padding
+              if (combinedExtent) {
+                mapView.current.goTo({
+                  target: combinedExtent.expand(1.2) // 20% padding around the extent
+                }).catch(error => {
+                  console.warn('Could not auto-zoom to catchment extent:', error);
+                });
+              }
+            } catch (error) {
+              console.warn('Error calculating catchment extent for auto-zoom:', error);
+            }
           }
         }
 
@@ -392,17 +485,19 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       const point = new Point.default({
         longitude: location.lng,
         latitude: location.lat,
-        spatialReference: mapView.current.spatialReference
+        spatialReference: {
+          wkid: 4326 // WGS84 since coordinates are in decimal degrees
+        }
       });
 
-      // Create a more visible marker for selected location
+      // Create a small discrete marker for selected location
       const markerSymbol = new SimpleMarkerSymbol.default({
-        color: [255, 0, 0, 1], // Bright red for better visibility
+        color: [255, 0, 0, 1], // Bright red for visibility
         outline: {
           color: [255, 255, 255, 1],
-          width: 4
+          width: 2
         },
-        size: 20,
+        size: 8, // Small dot size
         style: 'circle'
       });
 
@@ -420,6 +515,10 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       selectedLocationGraphic.current = graphic;
 
       console.log('Added selected location marker at:', location);
+      console.log('Graphics layer now has', graphicsLayer.current.graphics.length, 'graphics');
+      
+      // Force map to refresh and show the marker
+      mapView.current.requestUpdate();
 
     } catch (error) {
       console.error('Error adding selected location marker:', error);
@@ -449,7 +548,9 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         const point = new Point.default({
           longitude: position.lng,
           latitude: position.lat,
-          spatialReference: mapView.current.spatialReference
+          spatialReference: {
+            wkid: 4326 // WGS84 for decimal degree coordinates
+          }
         });
 
         // Create marker symbol with category color
@@ -553,22 +654,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         padding: 0
       }}
     >
-      {/* Minimal loading indicator */}
-      <div style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        zIndex: 1000,
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        color: 'white',
-        padding: '20px',
-        borderRadius: '8px',
-        fontSize: '14px',
-        display: mapView.current ? 'none' : 'block'
-      }}>
-        Loading Map...
-      </div>
+      
     </div>
   );
 });
