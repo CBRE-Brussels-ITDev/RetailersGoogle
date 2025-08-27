@@ -4,6 +4,8 @@ import Map from './components/Map';
 import PlaceDetailsSidebar from './components/PlaceDetailsSidebar';
 import CatchmentSidebar from './components/CatchmentSidebar';
 import CatchmentResultsSidebar from './components/CatchmentResultsSidebar';
+import CommerceAnalysis from './components/CommerceAnalysis';
+import CommerceRankingReport from './components/CommerceRankingReport';
 import GooglePlacesService from './services/GooglePlaces';
 
 function App() {
@@ -23,6 +25,11 @@ function App() {
   const [showCatchmentMode, setShowCatchmentMode] = useState(true);
   const [catchmentData, setCatchmentData] = useState([]);
   const [showCatchmentResults, setShowCatchmentResults] = useState(false);
+
+  // Commerce Analysis state
+  const [showCommerceAnalysis, setShowCommerceAnalysis] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState(null);
+  const [showRankingReport, setShowRankingReport] = useState(false);
 
   const handlePlaceClick = async (placeId) => {
     try {
@@ -324,6 +331,65 @@ function App() {
     }
   };
 
+  // Commerce Analysis Handlers
+  const handleShowCommerceAnalysis = () => {
+    if (!selectedLocation) {
+      alert('Please select a location first');
+      return;
+    }
+    if (!searchResultsData || searchResultsData.length === 0) {
+      alert('Please search for places first to enable commerce analysis');
+      return;
+    }
+    setShowCommerceAnalysis(true);
+  };
+
+  const handleCommerceAnalysisComplete = (results) => {
+    setAnalysisResults(results);
+    console.log('Commerce analysis completed:', results);
+  };
+
+  const handleShowRankingReport = () => {
+    if (!analysisResults) {
+      alert('Please complete the commerce analysis first');
+      return;
+    }
+    setShowRankingReport(true);
+  };
+
+  const handleExportCommerceReport = async (exportType, reportData) => {
+    if (!reportData) {
+      alert('No report data available');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      if (exportType === 'pdf') {
+        // Generate commerce analysis PDF report
+        await GooglePlacesService.generateCommerceReport(
+          reportData, 
+          'retail_commerce', // Default commerce type
+          selectedLocation ? `${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}` : 'Selected Location'
+        );
+      } else if (exportType === 'excel') {
+        // Export detailed analysis to Excel
+        await GooglePlacesService.exportPlacesToExcel(searchResultsData, {
+          location: selectedLocation,
+          analysisResults: reportData
+        });
+      }
+      
+      console.log(`${exportType.toUpperCase()} export completed successfully`);
+    } catch (error) {
+      console.error(`Error exporting ${exportType}:`, error);
+      alert(`Error exporting ${exportType}. Please try again.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw' }}>
       
@@ -364,7 +430,7 @@ function App() {
           />
         </div>
 
-        {/* Add CSS to remove browser's clear button and improve button interactions */}
+        {/* Add CSS for button interactions */}
         <style>{`
           input[type="text"]::-webkit-search-cancel-button,
           input[type="text"]::-webkit-search-decoration,
@@ -386,6 +452,13 @@ function App() {
           .search-input:focus {
             transform: scale(1.02);
             box-shadow: 0 4px 15px rgba(0,123,255,0.3) !important;
+          }
+          button:hover {
+            transform: translateY(-1px);
+          }
+          .analysis-button:hover, .ranking-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,123,255,0.4) !important;
           }
         `}</style>
 
@@ -410,9 +483,18 @@ function App() {
         {/* Search Results Counter - Only in places mode */}
         {!showCatchmentMode && searchResultsData.length > 0 && (
           <div style={styles.resultsCounter}>
-            <span style={styles.resultsText}>
-              📍 {searchResultsData.length} place{searchResultsData.length !== 1 ? 's' : ''} found
-            </span>
+            <div style={styles.resultsInfo}>
+              <span style={styles.resultsText}>
+                📍 {searchResultsData.length} place{searchResultsData.length !== 1 ? 's' : ''} found
+              </span>
+              <button
+                onClick={handleShowCommerceAnalysis}
+                style={styles.analysisButton}
+                title="Analyze this location for commerce potential"
+              >
+                📊 Analyze Location
+              </button>
+            </div>
           </div>
         )}
 
@@ -443,6 +525,7 @@ function App() {
           catchmentData={catchmentData}
           onClearAll={clearSearch}
           onToggleMode={toggleCatchmentMode}
+          onShowCommerceAnalysis={!showCatchmentMode ? handleShowCommerceAnalysis : null}
         />
       )}
 
@@ -468,6 +551,67 @@ function App() {
           onExportPlacesExcel={handleExportPlacesExcel}
           placesData={searchResultsData}
         />
+      )}
+
+      {/* Commerce Analysis Modal - Only in places mode */}
+      {!showCatchmentMode && showCommerceAnalysis && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <div style={styles.modalHeader}>
+              <h3>🏪 Commerce Location Analysis</h3>
+              <button 
+                onClick={() => setShowCommerceAnalysis(false)}
+                style={styles.modalCloseButton}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={styles.modalBody}>
+              <CommerceAnalysis
+                selectedLocation={selectedLocation}
+                places={searchResultsData}
+                catchmentData={catchmentData}
+                onGenerateReport={handleCommerceAnalysisComplete}
+              />
+              {analysisResults && (
+                <div style={styles.analysisActions}>
+                  <button
+                    onClick={handleShowRankingReport}
+                    style={styles.rankingButton}
+                  >
+                    📈 View Detailed Ranking Report
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Commerce Ranking Report Modal */}
+      {showRankingReport && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <div style={styles.modalHeader}>
+              <h3>📊 Comprehensive Commerce Ranking</h3>
+              <button 
+                onClick={() => setShowRankingReport(false)}
+                style={styles.modalCloseButton}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={styles.modalBody}>
+              <CommerceRankingReport
+                selectedLocation={selectedLocation}
+                places={searchResultsData}
+                catchmentData={catchmentData}
+                analysisResults={analysisResults}
+                onExportReport={handleExportCommerceReport}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Loading Overlay */}
@@ -547,15 +691,93 @@ const styles = {
     right: '20px',
     zIndex: 1000
   },
-  resultsText: {
+  resultsInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
     backgroundColor: 'rgba(40, 167, 69, 0.9)',
-    color: 'white',
-    padding: '8px 16px',
-    borderRadius: '20px',
-    fontSize: '13px',
-    fontWeight: '600',
+    padding: '12px 20px',
+    borderRadius: '25px',
     backdropFilter: 'blur(10px)',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+  },
+  resultsText: {
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: '600'
+  },
+  analysisButton: {
+    padding: '8px 16px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '20px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 6px rgba(0,123,255,0.3)'
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2500,
+    padding: '20px'
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+    maxWidth: '95vw',
+    maxHeight: '95vh',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '20px 30px',
+    borderBottom: '1px solid #e9ecef',
+    backgroundColor: '#f8f9fa'
+  },
+  modalCloseButton: {
+    background: 'none',
+    border: 'none',
+    fontSize: '24px',
+    cursor: 'pointer',
+    color: '#6c757d',
+    padding: '5px'
+  },
+  modalBody: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '0'
+  },
+  analysisActions: {
+    padding: '20px',
+    borderTop: '1px solid #e9ecef',
+    backgroundColor: '#f8f9fa',
+    textAlign: 'center'
+  },
+  rankingButton: {
+    padding: '12px 30px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    boxShadow: '0 3px 10px rgba(40,167,69,0.3)'
   },
   loadingOverlay: {
     position: 'fixed',

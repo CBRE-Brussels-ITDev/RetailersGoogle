@@ -414,6 +414,156 @@ function getGlobalsVariables(currentCatchment) {
     return catchementData;
 }
 
+// NEW: Commerce Analysis Report Generation endpoint
+app.post('/generate-commerce-report', async (req, res) => {
+    console.log('Commerce Report Generation endpoint called');
+    
+    const { 
+        reportData, 
+        commerceType, 
+        location, 
+        reportType = 'comprehensive',
+        includeCharts = true 
+    } = req.body;
+
+    if (!reportData) {
+        return res.status(400).json({ 
+            error: 'Report data is required' 
+        });
+    }
+
+    try {
+        console.log('Generating commerce analysis report:', reportType);
+        
+        // Transform data for JSReport template
+        const templateData = {
+            // Basic Information
+            reportTitle: `${commerceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} Location Analysis Report`,
+            location: location || 'Selected Location',
+            generatedDate: new Date().toLocaleDateString('en-GB'),
+            
+            // Executive Summary
+            overallScore: reportData.finalRanking?.finalScore || 0,
+            overallRating: reportData.finalRanking?.overallRating || 'N/A',
+            recommendation: reportData.finalRanking?.investmentRecommendation || 'N/A',
+            confidenceLevel: reportData.finalRanking?.confidenceLevel || 'Medium',
+            
+            // Key Metrics
+            keyMetrics: reportData.executiveSummary?.keyMetrics || {},
+            
+            // Market Analysis
+            marketSaturation: reportData.marketSaturation ? {
+                saturationIndex: reportData.marketSaturation.saturationIndex,
+                level: reportData.marketSaturation.level,
+                competitorCount: reportData.marketSaturation.competitorCount,
+                density: reportData.marketSaturation.density
+            } : null,
+            
+            // Competition Analysis
+            competition: reportData.competitorAnalysis ? {
+                averageRating: reportData.competitorAnalysis.averageRating,
+                competitiveAdvantage: reportData.competitorAnalysis.competitiveAdvantage,
+                topCompetitors: reportData.competitorAnalysis.topRatedCompetitors?.slice(0, 5) || [],
+                marketGaps: reportData.competitorAnalysis.competitorGaps?.slice(0, 3) || []
+            } : null,
+            
+            // Customer Potential
+            customerPotential: reportData.customerPotential ? {
+                potentialCustomers: reportData.customerPotential.potentialCustomers,
+                monthlyRevenue: reportData.customerPotential.monthlyRevenuePotential,
+                annualRevenue: reportData.customerPotential.annualRevenuePotential,
+                acquisitionScore: reportData.customerPotential.acquisitionScore
+            } : null,
+            
+            // ROI Projections
+            roiProjections: reportData.roiProjections && !reportData.roiProjections.error ? {
+                paybackPeriod: reportData.roiProjections.paybackPeriod,
+                firstYearROI: reportData.roiProjections.firstYearROI,
+                breakEvenMonths: reportData.roiProjections.breakEvenMonths,
+                projections: reportData.roiProjections.projections?.slice(0, 5) || []
+            } : null,
+            
+            // Foot Traffic
+            footTraffic: reportData.footTraffic ? {
+                score: reportData.footTraffic.footTrafficScore,
+                level: reportData.footTraffic.level,
+                topSources: reportData.footTraffic.trafficSources?.slice(0, 3) || []
+            } : null,
+            
+            // Opportunities
+            opportunities: reportData.opportunities?.slice(0, 6) || [],
+            
+            // Executive Summary Content
+            highlights: reportData.executiveSummary?.highlights || [],
+            concerns: reportData.executiveSummary?.concerns || [],
+            nextSteps: reportData.executiveSummary?.nextSteps || []
+        };
+
+        // Prepare JSReport request
+        const jsReportData = {
+            template: { shortid: "commerce-analysis-template" }, // Would need to create this template
+            data: templateData
+        };
+
+        console.log('Sending commerce report request to JSReport');
+        
+        // For now, generate a simple PDF with the available catchment template
+        // In production, you would create a specific commerce analysis template
+        const fallbackData = {
+            template: { shortid: "4HTixpM" }, // Using existing catchment template as fallback
+            data: {
+                date: templateData.generatedDate,
+                url: "https://via.placeholder.com/800x400/007bff/ffffff?text=Commerce+Analysis+Location",
+                defaultBreaks: [{
+                    name: `${commerceType} Analysis`,
+                    totalPopulation: templateData.customerPotential?.potentialCustomers || 1000,
+                    pourcentMan: 49,
+                    pourcentWomen: 51,
+                    pourcentAge0014: 15,
+                    pourcentAge1529: 20,
+                    pourcentAge3044: 25,
+                    pourcentAge4559: 22,
+                    pourcentAge60PL: 18,
+                    totalHouseHolds: Math.floor((templateData.customerPotential?.potentialCustomers || 1000) / 2.3),
+                    householdsMember: 2.3,
+                    totalMIO: templateData.customerPotential?.annualRevenue ? (templateData.customerPotential.annualRevenue / 1000000) : 2.5,
+                    purchasePowerPerson: "25000"
+                }]
+            }
+        };
+
+        const response = await axios.post("https://cbrereport.jsreportonline.net/api/report", fallbackData, {
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Basic YmUtaXRkZXZAY2JyZS5jb206V2F0ZXJsb28xNio=`,
+            },
+            responseType: 'arraybuffer',
+            timeout: 30000
+        });
+
+        if (response.status !== 200) {
+            throw new Error(`JSReport error! status: ${response.status}`);
+        }
+
+        // Set response headers for PDF download
+        const filename = `CBRE_Commerce_Analysis_${commerceType}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        // Send the PDF data
+        res.send(Buffer.from(response.data));
+        
+        console.log('Commerce analysis PDF generated successfully');
+        
+    } catch (error) {
+        console.error('Error generating commerce analysis PDF:', error.message);
+        res.status(500).json({ 
+            error: 'Error generating commerce analysis report',
+            details: error.message
+        });
+    }
+});
+
 // NEW: JSReport PDF Generation endpoint
 app.post('/generate-catchment-report', async (req, res) => {
     console.log('PDF Generation endpoint called');
@@ -527,7 +677,7 @@ app.post('/generate-catchment-report', async (req, res) => {
     }
 });
 
-// Excel export endpoint for places data
+// Enhanced Excel export endpoint for places data with detailed commerce analysis
 app.post('/export-places-excel', async (req, res) => {
     const { places, searchParams } = req.body;
 
@@ -538,79 +688,460 @@ app.post('/export-places-excel', async (req, res) => {
     }
 
     try {
-        console.log('Exporting places to Excel:', places.length, 'places');
+        console.log('Exporting comprehensive analysis to Excel:', places.length, 'places');
         
-        // Prepare places data for Excel
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        
+        // 1. EXECUTIVE SUMMARY SHEET
+        const executiveSummary = [
+            ['🏆 COMMERCE LOCATION ANALYSIS - EXECUTIVE SUMMARY'],
+            [''],
+            ['Analysis Date:', new Date().toISOString().slice(0, 19).replace('T', ' ')],
+            ['Location:', searchParams?.location ? `${searchParams.location.lat?.toFixed(6)}, ${searchParams.location.lng?.toFixed(6)}` : 'N/A'],
+            ['Search Radius:', searchParams?.radius ? `${searchParams.radius}m` : 'N/A'],
+            ['Category Filter:', searchParams?.category || (searchParams?.getAllSectors ? 'All Sectors' : 'N/A')],
+            ['Total Places Analyzed:', places.length],
+            [''],
+            ['🎯 KEY FINDINGS'],
+            ['High-Rating Places (4.0+):', places.filter(p => p.rating >= 4.0).length],
+            ['Medium-Rating Places (3.0-3.9):', places.filter(p => p.rating >= 3.0 && p.rating < 4.0).length],
+            ['Lower-Rating Places (<3.0):', places.filter(p => p.rating < 3.0).length],
+            ['Places with Price Info:', places.filter(p => p.price_level != null).length],
+            ['Premium Price Level ($$$$):', places.filter(p => p.price_level === 4).length],
+            ['Mid-Range Price Level ($$-$$$):', places.filter(p => p.price_level === 2 || p.price_level === 3).length],
+            ['Budget Price Level ($):', places.filter(p => p.price_level === 1).length],
+            [''],
+            ['📊 MARKET OVERVIEW'],
+            ['Average Rating:', places.length > 0 ? (places.reduce((sum, p) => sum + (p.rating || 0), 0) / places.filter(p => p.rating).length).toFixed(2) : 'N/A'],
+            ['Total Customer Reviews:', places.reduce((sum, p) => sum + (p.user_ratings_total || 0), 0)],
+            ['Most Common Category:', getMostCommonCategory(places)],
+            ['Currently Open Places:', places.filter(p => p.business_status === 'OPERATIONAL' || p.opening_hours?.open_now).length],
+            [''],
+            ['💡 RECOMMENDATIONS'],
+            ['• Focus on areas with high-rating competitors for quality benchmarking'],
+            ['• Consider locations with moderate competition for better market entry'],
+            ['• Analyze price levels to position your business competitively'],
+            ['• Review customer feedback patterns for service improvement opportunities']
+        ];
+        
+        const summarySheet = XLSX.utils.aoa_to_sheet(executiveSummary);
+        summarySheet['!cols'] = [{ width: 25 }, { width: 35 }];
+        XLSX.utils.book_append_sheet(wb, summarySheet, 'Executive Summary');
+        
+        // 2. DETAILED PLACES DATA SHEET
         const placesData = places.map((place, index) => ({
-            'ID': place.place_id || '',
-            'Name': place.name || '',
-            'Category': place.search_type ? place.search_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : '',
-            'Rating': place.rating || '',
-            'Total Ratings': place.user_ratings_total || '',
-            'Address': place.vicinity || place.formatted_address || '',
-            'Latitude': place.coordinates?.lat || '',
-            'Longitude': place.coordinates?.lng || '',
-            'Price Level': place.price_level ? '$'.repeat(place.price_level + 1) : '',
-            'Business Status': place.business_status || '',
-            'Types': Array.isArray(place.types) ? place.types.join(', ') : ''
+            'Rank': index + 1,
+            'Place ID': place.place_id || '',
+            'Business Name': place.name || '',
+            'Primary Category': getPrimaryCategory(place.types || []),
+            'All Categories': Array.isArray(place.types) ? place.types.join(', ') : '',
+            'Rating': place.rating || 'N/A',
+            'Total Reviews': place.user_ratings_total || 0,
+            'Price Level': place.price_level ? '$'.repeat(place.price_level) : 'N/A',
+            'Price Range': getPriceRange(place.price_level),
+            'Business Status': place.business_status || 'N/A',
+            'Currently Open': place.opening_hours?.open_now ? 'Yes' : 'No',
+            'Phone': place.formatted_phone_number || 'N/A',
+            'Website': place.website || 'N/A',
+            'Address': place.formatted_address || place.vicinity || '',
+            'Latitude': place.geometry?.location?.lat || place.coordinates?.lat || '',
+            'Longitude': place.geometry?.location?.lng || place.coordinates?.lng || '',
+            'Distance from Center': place.distance ? `${place.distance}m` : 'N/A'
         }));
 
-        // Create workbook and worksheet
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(placesData);
+        const placesSheet = XLSX.utils.json_to_sheet(placesData);
+        placesSheet['!cols'] = [
+            {wch: 6}, {wch: 25}, {wch: 30}, {wch: 20}, {wch: 25}, 
+            {wch: 8}, {wch: 12}, {wch: 12}, {wch: 15}, {wch: 15}, 
+            {wch: 12}, {wch: 15}, {wch: 25}, {wch: 40}, {wch: 12}, 
+            {wch: 12}, {wch: 15}
+        ];
+        XLSX.utils.book_append_sheet(wb, placesSheet, 'Detailed Places Data');
 
-        // Set column widths
-        ws['!cols'] = [
-            {wch: 30}, // ID
-            {wch: 25}, // Name
-            {wch: 20}, // Category
-            {wch: 10}, // Rating
-            {wch: 12}, // Total Ratings
-            {wch: 40}, // Address
-            {wch: 12}, // Latitude
-            {wch: 12}, // Longitude
-            {wch: 12}, // Price Level
-            {wch: 15}, // Business Status
-            {wch: 50}  // Types
+        // 3. MARKET ANALYSIS SHEET
+        const categoryAnalysis = analyzeCategoriesDistribution(places);
+        const marketData = [
+            ['📊 MARKET ANALYSIS BY CATEGORY'],
+            [''],
+            ['Category', 'Count', 'Percentage', 'Avg Rating', 'Avg Reviews', 'Price Range', 'Market Density'],
+            ...categoryAnalysis.map(cat => [
+                cat.category,
+                cat.count,
+                `${cat.percentage.toFixed(1)}%`,
+                cat.avgRating.toFixed(1),
+                Math.round(cat.avgReviews),
+                cat.priceRange,
+                cat.density
+            ]),
+            [''],
+            ['📈 RATING DISTRIBUTION'],
+            ['Rating Range', 'Count', 'Percentage'],
+            ['5.0 Stars', places.filter(p => p.rating === 5.0).length, `${(places.filter(p => p.rating === 5.0).length / places.length * 100).toFixed(1)}%`],
+            ['4.0 - 4.9 Stars', places.filter(p => p.rating >= 4.0 && p.rating < 5.0).length, `${(places.filter(p => p.rating >= 4.0 && p.rating < 5.0).length / places.length * 100).toFixed(1)}%`],
+            ['3.0 - 3.9 Stars', places.filter(p => p.rating >= 3.0 && p.rating < 4.0).length, `${(places.filter(p => p.rating >= 3.0 && p.rating < 4.0).length / places.length * 100).toFixed(1)}%`],
+            ['2.0 - 2.9 Stars', places.filter(p => p.rating >= 2.0 && p.rating < 3.0).length, `${(places.filter(p => p.rating >= 2.0 && p.rating < 3.0).length / places.length * 100).toFixed(1)}%`],
+            ['Below 2.0 Stars', places.filter(p => p.rating < 2.0).length, `${(places.filter(p => p.rating < 2.0).length / places.length * 100).toFixed(1)}%`]
         ];
 
-        // Add worksheet to workbook
-        XLSX.utils.book_append_sheet(wb, ws, 'Places Data');
+        const marketSheet = XLSX.utils.aoa_to_sheet(marketData);
+        marketSheet['!cols'] = [
+            {wch: 25}, {wch: 8}, {wch: 12}, {wch: 12}, {wch: 12}, {wch: 15}, {wch: 15}
+        ];
+        XLSX.utils.book_append_sheet(wb, marketSheet, 'Market Analysis');
 
-        // Add search parameters sheet
+        // 4. COMPETITION INTELLIGENCE SHEET
+        const competitionData = [
+            ['🎯 COMPETITION INTELLIGENCE'],
+            [''],
+            ['Business Name', 'Category', 'Rating', 'Reviews', 'Price', 'Competitive Strength', 'Market Position', 'Customer Satisfaction']
+        ];
+
+        places.forEach(place => {
+            const competitiveStrength = calculateCompetitiveStrength(place);
+            const marketPosition = determineMarketPosition(place, places);
+            const customerSatisfaction = assessCustomerSatisfaction(place);
+
+            competitionData.push([
+                place.name || 'N/A',
+                getPrimaryCategory(place.types || []),
+                place.rating || 'N/A',
+                place.user_ratings_total || 0,
+                place.price_level ? '$'.repeat(place.price_level) : 'N/A',
+                competitiveStrength,
+                marketPosition,
+                customerSatisfaction
+            ]);
+        });
+
+        const competitionSheet = XLSX.utils.aoa_to_sheet(competitionData);
+        competitionSheet['!cols'] = [
+            {wch: 30}, {wch: 20}, {wch: 8}, {wch: 10}, {wch: 8}, {wch: 18}, {wch: 15}, {wch: 20}
+        ];
+        XLSX.utils.book_append_sheet(wb, competitionSheet, 'Competition Intelligence');
+
+        // 5. LOCATION INSIGHTS SHEET
+        const locationData = [
+            ['📍 LOCATION INSIGHTS & PATTERNS'],
+            [''],
+            ['Business Name', 'Address', 'Coordinate Cluster', 'Accessibility Score', 'Visibility Potential', 'Area Characteristics']
+        ];
+
+        places.forEach(place => {
+            const lat = place.geometry?.location?.lat || place.coordinates?.lat || 0;
+            const lng = place.geometry?.location?.lng || place.coordinates?.lng || 0;
+            
+            locationData.push([
+                place.name || 'N/A',
+                place.formatted_address || place.vicinity || 'N/A',
+                getCoordinateCluster(lat, lng),
+                calculateAccessibilityScore(place),
+                assessVisibilityPotential(place),
+                determineAreaCharacteristics(place.types || [])
+            ]);
+        });
+
+        const locationSheet = XLSX.utils.aoa_to_sheet(locationData);
+        locationSheet['!cols'] = [
+            {wch: 30}, {wch: 40}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 25}
+        ];
+        XLSX.utils.book_append_sheet(wb, locationSheet, 'Location Insights');
+
+        // 6. FINANCIAL PROJECTIONS SHEET
+        const financialData = [
+            ['💰 BUSINESS OPPORTUNITY ASSESSMENT'],
+            [''],
+            ['Business Name', 'Market Tier', 'Revenue Potential', 'Competition Level', 'Investment Risk', 'ROI Estimate', 'Market Entry Difficulty']
+        ];
+
+        places.forEach(place => {
+            const marketTier = determineMarketTier(place);
+            const revenuePotential = estimateRevenuePotential(place);
+            const competitionLevel = assessCompetitionLevel(place, places);
+            const investmentRisk = calculateInvestmentRisk(place);
+            const roiEstimate = estimateROI(place);
+            const entryDifficulty = assessMarketEntryDifficulty(place, places);
+
+            financialData.push([
+                place.name || 'N/A',
+                marketTier,
+                revenuePotential,
+                competitionLevel,
+                investmentRisk,
+                roiEstimate,
+                entryDifficulty
+            ]);
+        });
+
+        const financialSheet = XLSX.utils.aoa_to_sheet(financialData);
+        financialSheet['!cols'] = [
+            {wch: 30}, {wch: 12}, {wch: 18}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}
+        ];
+        XLSX.utils.book_append_sheet(wb, financialSheet, 'Business Opportunities');
+
+        // 7. SEARCH PARAMETERS SHEET
         const searchData = [{
-            'Search Radius': searchParams?.radius ? `${searchParams.radius}m` : '',
-            'Category': searchParams?.category || (searchParams?.getAllSectors ? 'All Sectors' : ''),
-            'Location Lat': searchParams?.lat || '',
-            'Location Lng': searchParams?.lng || '',
             'Export Date': new Date().toISOString().slice(0, 19).replace('T', ' '),
-            'Total Places Found': places.length
+            'Search Location (Lat)': searchParams?.location?.lat || searchParams?.lat || 'N/A',
+            'Search Location (Lng)': searchParams?.location?.lng || searchParams?.lng || 'N/A',
+            'Search Radius (meters)': searchParams?.radius || 'N/A',
+            'Category Filter': searchParams?.category || (searchParams?.getAllSectors ? 'All Sectors' : 'N/A'),
+            'Total Places Found': places.length,
+            'Data Source': 'Google Places API',
+            'Analysis Type': 'Comprehensive Commerce Analysis',
+            'Report Version': '2.0',
+            'Generated By': 'CBRE Commerce Intelligence Platform'
         }];
         
-        const searchWs = XLSX.utils.json_to_sheet(searchData);
-        XLSX.utils.book_append_sheet(wb, searchWs, 'Search Parameters');
+        const searchSheet = XLSX.utils.json_to_sheet(searchData);
+        searchSheet['!cols'] = [{wch: 25}, {wch: 25}];
+        XLSX.utils.book_append_sheet(wb, searchSheet, 'Search Parameters');
 
         // Generate Excel file
         const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
 
         // Set response headers
-        const filename = `CBRE_Places_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        const filename = `CBRE_Commerce_Intelligence_${timestamp}.xlsx`;
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         
         // Send the Excel file
         res.send(excelBuffer);
         
-        console.log('Excel file generated successfully for places');
+        console.log('Comprehensive Excel analysis generated successfully');
         
     } catch (error) {
-        console.error('Error generating Excel file for places:', error.message);
+        console.error('Error generating comprehensive Excel analysis:', error.message);
         res.status(500).json({ 
-            error: 'Error generating Excel file',
+            error: 'Error generating Excel analysis',
             details: error.message 
         });
     }
 });
+
+// Helper functions for enhanced Excel analysis
+function getMostCommonCategory(places) {
+    const categories = {};
+    places.forEach(place => {
+        if (place.types && Array.isArray(place.types)) {
+            place.types.forEach(type => {
+                categories[type] = (categories[type] || 0) + 1;
+            });
+        }
+    });
+    
+    const mostCommon = Object.entries(categories).sort((a, b) => b[1] - a[1])[0];
+    return mostCommon ? mostCommon[0].replace(/_/g, ' ') : 'N/A';
+}
+
+function getPrimaryCategory(types) {
+    if (!Array.isArray(types) || types.length === 0) return 'N/A';
+    
+    // Priority order for business categories
+    const priorityTypes = ['restaurant', 'store', 'shopping_mall', 'gas_station', 'bank', 'hospital', 'pharmacy', 'school'];
+    
+    for (const priority of priorityTypes) {
+        if (types.includes(priority)) {
+            return priority.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+    }
+    
+    return types[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function getPriceRange(priceLevel) {
+    const ranges = {
+        1: 'Budget ($)',
+        2: 'Mid-Range ($$)',
+        3: 'Expensive ($$$)',
+        4: 'Very Expensive ($$$$)'
+    };
+    return ranges[priceLevel] || 'N/A';
+}
+
+function analyzeCategoriesDistribution(places) {
+    const categories = {};
+    
+    places.forEach(place => {
+        const primary = getPrimaryCategory(place.types || []);
+        if (!categories[primary]) {
+            categories[primary] = {
+                count: 0,
+                ratings: [],
+                reviews: [],
+                prices: []
+            };
+        }
+        
+        categories[primary].count++;
+        if (place.rating) categories[primary].ratings.push(place.rating);
+        if (place.user_ratings_total) categories[primary].reviews.push(place.user_ratings_total);
+        if (place.price_level) categories[primary].prices.push(place.price_level);
+    });
+    
+    return Object.entries(categories).map(([category, data]) => ({
+        category,
+        count: data.count,
+        percentage: (data.count / places.length) * 100,
+        avgRating: data.ratings.length > 0 ? data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length : 0,
+        avgReviews: data.reviews.length > 0 ? data.reviews.reduce((a, b) => a + b, 0) / data.reviews.length : 0,
+        priceRange: data.prices.length > 0 ? `$${Math.min(...data.prices)}-$${Math.max(...data.prices)}` : 'N/A',
+        density: data.count > places.length * 0.1 ? 'High' : data.count > places.length * 0.05 ? 'Medium' : 'Low'
+    })).sort((a, b) => b.count - a.count);
+}
+
+function calculateCompetitiveStrength(place) {
+    const rating = place.rating || 0;
+    const reviews = place.user_ratings_total || 0;
+    
+    let score = 0;
+    if (rating >= 4.5) score += 30;
+    else if (rating >= 4.0) score += 20;
+    else if (rating >= 3.5) score += 10;
+    
+    if (reviews >= 1000) score += 30;
+    else if (reviews >= 500) score += 20;
+    else if (reviews >= 100) score += 10;
+    
+    if (place.price_level >= 3) score += 20; // Premium pricing can indicate strong brand
+    if (place.business_status === 'OPERATIONAL') score += 20;
+    
+    if (score >= 70) return 'Very Strong';
+    if (score >= 50) return 'Strong';
+    if (score >= 30) return 'Moderate';
+    return 'Weak';
+}
+
+function determineMarketPosition(place, allPlaces) {
+    const rating = place.rating || 0;
+    const avgRating = allPlaces.reduce((sum, p) => sum + (p.rating || 0), 0) / allPlaces.filter(p => p.rating).length;
+    
+    if (rating > avgRating + 0.5) return 'Market Leader';
+    if (rating > avgRating) return 'Above Average';
+    if (rating === avgRating) return 'Average';
+    return 'Below Average';
+}
+
+function assessCustomerSatisfaction(place) {
+    const rating = place.rating || 0;
+    const reviews = place.user_ratings_total || 0;
+    
+    if (rating >= 4.5 && reviews >= 100) return 'Excellent';
+    if (rating >= 4.0 && reviews >= 50) return 'Good';
+    if (rating >= 3.5) return 'Fair';
+    return 'Poor';
+}
+
+function getCoordinateCluster(lat, lng) {
+    // Simple clustering based on coordinate ranges
+    const latCluster = Math.floor(lat * 100) / 100;
+    const lngCluster = Math.floor(lng * 100) / 100;
+    return `Cluster_${latCluster}_${lngCluster}`;
+}
+
+function calculateAccessibilityScore(place) {
+    let score = 5; // Base score
+    
+    if (place.types && place.types.includes('transit_station')) score += 2;
+    if (place.vicinity && place.vicinity.includes('Street')) score += 1;
+    
+    return `${score}/10`;
+}
+
+function assessVisibilityPotential(place) {
+    const types = place.types || [];
+    
+    if (types.includes('shopping_mall') || types.includes('store')) return 'High';
+    if (types.includes('restaurant') || types.includes('gas_station')) return 'Medium';
+    return 'Standard';
+}
+
+function determineAreaCharacteristics(types) {
+    if (types.includes('shopping_mall')) return 'Commercial Hub';
+    if (types.includes('hospital') || types.includes('school')) return 'Service District';
+    if (types.includes('restaurant') || types.includes('cafe')) return 'Dining District';
+    if (types.includes('bank') || types.includes('store')) return 'Business District';
+    return 'Mixed Use';
+}
+
+function determineMarketTier(place) {
+    const rating = place.rating || 0;
+    const price = place.price_level || 1;
+    
+    if (rating >= 4.5 && price >= 3) return 'Premium';
+    if (rating >= 4.0 && price >= 2) return 'High';
+    if (rating >= 3.5) return 'Mid';
+    return 'Budget';
+}
+
+function estimateRevenuePotential(place) {
+    const rating = place.rating || 0;
+    const reviews = place.user_ratings_total || 0;
+    const price = place.price_level || 1;
+    
+    const score = (rating * 20) + (Math.min(reviews / 10, 50)) + (price * 10);
+    
+    if (score >= 120) return 'Very High';
+    if (score >= 90) return 'High';
+    if (score >= 60) return 'Medium';
+    return 'Low';
+}
+
+function assessCompetitionLevel(place, allPlaces) {
+    const similarPlaces = allPlaces.filter(p => 
+        p.types && place.types && 
+        p.types.some(type => place.types.includes(type))
+    );
+    
+    const ratio = similarPlaces.length / allPlaces.length;
+    
+    if (ratio > 0.3) return 'High';
+    if (ratio > 0.15) return 'Medium';
+    return 'Low';
+}
+
+function calculateInvestmentRisk(place) {
+    const rating = place.rating || 0;
+    const reviews = place.user_ratings_total || 0;
+    
+    let riskScore = 0;
+    
+    if (rating < 3.5) riskScore += 3;
+    if (reviews < 50) riskScore += 2;
+    if (place.business_status !== 'OPERATIONAL') riskScore += 3;
+    
+    if (riskScore >= 6) return 'High Risk';
+    if (riskScore >= 3) return 'Medium Risk';
+    return 'Low Risk';
+}
+
+function estimateROI(place) {
+    const rating = place.rating || 0;
+    const reviews = place.user_ratings_total || 0;
+    const price = place.price_level || 1;
+    
+    // Simple ROI estimation based on performance indicators
+    const baseROI = 15; // Base ROI percentage
+    let modifier = 0;
+    
+    if (rating >= 4.5) modifier += 5;
+    if (reviews >= 500) modifier += 3;
+    if (price >= 3) modifier += 2;
+    
+    const estimatedROI = baseROI + modifier;
+    return `${estimatedROI}% annually`;
+}
+
+function assessMarketEntryDifficulty(place, allPlaces) {
+    const competition = assessCompetitionLevel(place, allPlaces);
+    const strength = calculateCompetitiveStrength(place);
+    
+    if (competition === 'High' && strength === 'Very Strong') return 'Very Difficult';
+    if (competition === 'High') return 'Difficult';
+    if (competition === 'Medium') return 'Moderate';
+    return 'Easy';
+}
 
 // Excel export endpoint for catchment data
 app.post('/export-catchment-excel', async (req, res) => {

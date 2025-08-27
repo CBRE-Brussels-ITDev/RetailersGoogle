@@ -174,6 +174,37 @@ const GooglePlacesService = {
         }
     },
 
+    // Generate commerce analysis report
+    async generateCommerceReport(reportData, commerceType, location) {
+        console.log('Generating commerce analysis report:', { commerceType, location });
+        try {
+            const response = await axios.post(`${BASE_URL}/generate-commerce-report`, {
+                reportData,
+                commerceType,
+                location,
+                reportType: 'comprehensive',
+                includeCharts: true
+            }, {
+                responseType: 'blob'
+            });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `CBRE_Commerce_Analysis_${commerceType}_${Date.now()}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error generating commerce report:', error);
+            throw error;
+        }
+    },
+
     // Helper method for existing search functionality
     async searchPlaces(lat, lng, radius, options = {}) {
         const { 

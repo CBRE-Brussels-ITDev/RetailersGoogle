@@ -26,7 +26,8 @@ const CatchmentSidebar = ({
   showCatchmentMode,
   catchmentData,
   onClearAll,
-  onToggleMode
+  onToggleMode,
+  onShowCommerceAnalysis  // New prop for commerce analysis
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -44,7 +45,33 @@ const CatchmentSidebar = ({
   const [showDemographics, setShowDemographics] = useState(true);
 
   // Radius options
-  const radiusOptions = [
+  const getCategoryEmoji = (category) => {
+  const emojiMap = {
+    'restaurant': '🍽️',
+    'store': '🏪', 
+    'shopping_mall': '🛍️',
+    'gas_station': '⛽',
+    'bank': '🏦',
+    'hospital': '🏥',
+    'pharmacy': '💊',
+    'school': '🎓',
+    'gym': '💪',
+    'beauty_salon': '💄',
+    'car_dealer': '🚗',
+    'electronics_store': '📱',
+    'clothing_store': '👕',
+    'supermarket': '🛒',
+    'bakery': '🥖',
+    'cafe': '☕',
+    'bar': '🍺',
+    'tourist_attraction': '🎯',
+    'park': '🌳',
+    'hotel': '🏨'
+  };
+  return emojiMap[category] || '📍';
+};
+
+const radiusOptions = [
     { value: '500', label: '500m' },
     { value: '1000', label: '1KM' },
     { value: '2000', label: '2KM' },
@@ -387,49 +414,159 @@ const CatchmentSidebar = ({
           )}
         </div>
       ) : (
-        // PLACES MODE
+        // PLACES MODE - ENHANCED USER INTERFACE
         <div style={styles.searchSection}>
           <h5 style={styles.sectionTitle}>
-            🔍 Place Search
+            🔍 Smart Place Discovery
           </h5>
 
-          {/* Search Form */}
+          {/* Quick Search Tips */}
+          <div style={styles.searchTips}>
+            <div style={styles.tipHeader}>💡 Quick Tips:</div>
+            <div style={styles.tips}>
+              • Select location first, then choose search options
+              • Use "All Sectors" for comprehensive analysis
+              • Smaller radius = more focused results
+            </div>
+          </div>
+
+          {/* Welcome Message for New Users */}
+          {!selectedLocation && (
+            <div style={styles.welcomeMessage}>
+              <div style={styles.welcomeIcon}>🎯</div>
+              <h4 style={styles.welcomeTitle}>Ready to Discover?</h4>
+              <p style={styles.welcomeText}>
+                Click on the map to select your analysis location and unlock powerful business insights!
+              </p>
+              <div style={styles.welcomeSteps}>
+                <div style={styles.step}>
+                  <span style={styles.stepNumber}>1</span>
+                  <span style={styles.stepText}>Select location on map</span>
+                </div>
+                <div style={styles.step}>
+                  <span style={styles.stepNumber}>2</span>
+                  <span style={styles.stepText}>Choose search radius & type</span>
+                </div>
+                <div style={styles.step}>
+                  <span style={styles.stepNumber}>3</span>
+                  <span style={styles.stepText}>Analyze & export results</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Selected Location Display */}
+          {selectedLocation && (
+            <div style={styles.selectedLocationInfo}>
+              <div style={styles.locationHeader}>
+                <span style={styles.locationIcon}>✅</span>
+                <div style={styles.locationDetails}>
+                  <div style={styles.locationTitle}>Analysis Location Selected</div>
+                  <div style={styles.locationCoords}>
+                    {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                  </div>
+                </div>
+                <button 
+                  onClick={onClearAll}
+                  style={styles.changeLocationBtn}
+                  title="Change location"
+                >
+                  🔄
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Search Form - Enhanced */}
           <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
+            {/* Search Radius with Visual Indicator */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Search Radius:</label>
-              <select
-                value={radius}
-                onChange={(e) => setRadius(e.target.value)}
-                style={styles.select}
-              >
-                {radiusOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={getAllSectors}
-                  onChange={(e) => setGetAllSectors(e.target.checked)}
-                  style={styles.checkbox}
-                />
-                Get All Sectors
+              <label style={styles.enhancedLabel}>
+                <span style={styles.labelIcon}>📍</span>
+                Search Radius: <strong>{radius}m</strong>
+                <span style={styles.labelHint}>({(parseInt(radius)/1000).toFixed(1)}km circle)</span>
               </label>
+              <div style={styles.radiusSelector}>
+                {radiusOptions.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setRadius(option.value)}
+                    style={{
+                      ...styles.radiusButton,
+                      ...(radius === option.value ? styles.radiusButtonActive : {})
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {/* Search Mode Selection */}
+            <div style={styles.formGroup}>
+              <label style={styles.enhancedLabel}>
+                <span style={styles.labelIcon}>🎯</span>
+                Search Strategy:
+              </label>
+              <div style={styles.strategyButtons}>
+                <button
+                  type="button"
+                  onClick={() => setGetAllSectors(true)}
+                  style={{
+                    ...styles.strategyButton,
+                    ...(getAllSectors ? styles.strategyButtonActive : {})
+                  }}
+                >
+                  <div style={styles.strategyTitle}>🌐 Complete Market Scan</div>
+                  <div style={styles.strategyDesc}>Find all business types (Recommended for analysis)</div>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setGetAllSectors(false)}
+                  style={{
+                    ...styles.strategyButton,
+                    ...(!getAllSectors ? styles.strategyButtonActive : {})
+                  }}
+                >
+                  <div style={styles.strategyTitle}>🔍 Targeted Search</div>
+                  <div style={styles.strategyDesc}>Focus on specific business category</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Category Selection - Only for targeted search */}
             {!getAllSectors && (
               <div style={styles.formGroup}>
-                <label style={styles.label}>Category:</label>
+                <label style={styles.enhancedLabel}>
+                  <span style={styles.labelIcon}>🏪</span>
+                  Business Category:
+                </label>
+                <div style={styles.categoryGrid}>
+                  {categories.slice(0, 8).map(cat => (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => setCategory(cat.value)}
+                      style={{
+                        ...styles.categoryButton,
+                        ...(category === cat.value ? styles.categoryButtonActive : {})
+                      }}
+                    >
+                      <span style={styles.categoryEmoji}>{getCategoryEmoji(cat.value)}</span>
+                      <span style={styles.categoryLabel}>{cat.label}</span>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Full category dropdown for all options */}
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  style={styles.select}
+                  style={styles.categoryDropdown}
                 >
+                  <option value="">Choose from all categories...</option>
                   {categories.map(cat => (
                     <option key={cat.value} value={cat.value}>
                       {getCategoryEmoji(cat.value)} {cat.label}
@@ -439,32 +576,75 @@ const CatchmentSidebar = ({
               </div>
             )}
 
+            {/* Enhanced Search Button */}
             <button
               type="submit"
               disabled={!selectedLocation || isLoading}
               style={{
-                ...styles.searchButton,
+                ...styles.enhancedSearchButton,
                 ...((!selectedLocation || isLoading) ? styles.disabledButton : {})
               }}
             >
-              {isLoading ? 'Searching...' : 'Search Places'}
+              {isLoading ? (
+                <span>
+                  <span style={styles.spinner}>⟳</span> Searching Places...
+                </span>
+              ) : (
+                <span>
+                  🚀 {getAllSectors ? 'Discover All Businesses' : `Find ${categories.find(c => c.value === category)?.label || 'Places'}`}
+                </span>
+              )}
             </button>
           </form>
 
-          {/* Results Summary */}
+          {/* Enhanced Results Summary */}
           {resultsCount > 0 && (
-            <div style={styles.resultsInfo}>
-              Found {resultsCount} place{resultsCount !== 1 ? 's' : ''}
+            <div style={styles.enhancedResultsInfo}>
+              <div style={styles.resultsHeader}>
+                <span style={styles.resultsIcon}>✅</span>
+                <div style={styles.resultsText}>
+                  <div style={styles.resultsMain}>
+                    Found <strong>{resultsCount}</strong> business{resultsCount !== 1 ? 'es' : ''}
+                  </div>
+                  <div style={styles.resultsDetail}>
+                    Within {radius}m of selected location
+                  </div>
+                </div>
+              </div>
+              
+              <div style={styles.actionButtons}>
+                <button
+                  onClick={onShowCommerceAnalysis}
+                  style={styles.primaryActionButton}
+                  disabled={!selectedLocation || resultsCount === 0}
+                  title="Analyze this location for commerce potential"
+                >
+                  📊 Start Analysis
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Clear Button - Only show if there's data to clear */}
+          {/* Progress Indicator for Loading */}
+          {isLoading && (
+            <div style={styles.loadingProgress}>
+              <div style={styles.progressBar}>
+                <div style={styles.progressFill}></div>
+              </div>
+              <div style={styles.loadingText}>
+                {getAllSectors ? 'Scanning all business types...' : 'Searching for places...'}
+              </div>
+            </div>
+          )}
+
+          {/* Clear Button - Enhanced */}
           {(resultsCount > 0 || selectedLocation) && (
             <button
               onClick={onClearAll}
-              style={styles.clearButton}
+              style={styles.enhancedClearButton}
             >
-              🗑️ Clear All
+              <span style={styles.clearIcon}>🗑️</span>
+              Clear Search & Start Over
             </button>
           )}
         </div>
@@ -1021,22 +1201,403 @@ const styles = {
     marginTop: '15px',
     width: '100%',
     transition: 'background-color 0.2s'
+  },
+  commerceAnalysisButton: {
+    padding: '8px 15px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '600',
+    marginLeft: '15px',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 6px rgba(0,123,255,0.3)'
+  },
+
+  // Enhanced UI styles for improved Places search
+  searchTips: {
+    background: '#e8f4f8',
+    padding: '12px',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    border: '1px solid #b3e5fc'
+  },
+  tipHeader: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#0277bd',
+    marginBottom: '6px'
+  },
+  tips: {
+    fontSize: '12px',
+    color: '#01579b',
+    lineHeight: '1.4'
+  },
+  enhancedLabel: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#2c3e50',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  labelIcon: {
+    fontSize: '16px'
+  },
+  labelHint: {
+    fontSize: '12px',
+    color: '#6c757d',
+    fontWeight: '400'
+  },
+  radiusSelector: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px'
+  },
+  radiusButton: {
+    padding: '10px 12px',
+    border: '2px solid #dee2e6',
+    borderRadius: '8px',
+    background: 'white',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease',
+    textAlign: 'center'
+  },
+  radiusButtonActive: {
+    borderColor: '#007acc',
+    background: '#007acc',
+    color: 'white',
+    transform: 'translateY(-1px)',
+    boxShadow: '0 3px 6px rgba(0, 122, 204, 0.2)'
+  },
+  strategyButtons: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  strategyButton: {
+    padding: '15px',
+    border: '2px solid #dee2e6',
+    borderRadius: '10px',
+    background: 'white',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'all 0.2s ease'
+  },
+  strategyButtonActive: {
+    borderColor: '#007acc',
+    background: '#f0f8ff',
+    transform: 'translateY(-1px)',
+    boxShadow: '0 3px 8px rgba(0, 122, 204, 0.15)'
+  },
+  strategyTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: '4px'
+  },
+  strategyDesc: {
+    fontSize: '12px',
+    color: '#6c757d',
+    lineHeight: '1.3'
+  },
+  categoryGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px',
+    marginBottom: '10px'
+  },
+  categoryButton: {
+    padding: '10px 8px',
+    border: '2px solid #dee2e6',
+    borderRadius: '8px',
+    background: 'white',
+    cursor: 'pointer',
+    fontSize: '12px',
+    textAlign: 'center',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px'
+  },
+  categoryButtonActive: {
+    borderColor: '#28a745',
+    background: '#f8fff8',
+    transform: 'translateY(-1px)'
+  },
+  categoryEmoji: {
+    fontSize: '16px'
+  },
+  categoryLabel: {
+    fontSize: '11px',
+    fontWeight: '500'
+  },
+  categoryDropdown: {
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '2px solid #dee2e6',
+    fontSize: '14px',
+    outline: 'none',
+    background: 'white'
+  },
+  enhancedSearchButton: {
+    padding: '16px 20px',
+    background: 'linear-gradient(135deg, #007acc 0%, #0056b3 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: '700',
+    transition: 'all 0.3s ease',
+    marginTop: '15px',
+    boxShadow: '0 4px 12px rgba(0, 122, 204, 0.3)',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  spinner: {
+    display: 'inline-block',
+    animation: 'spin 1s linear infinite'
+  },
+  loadingProgress: {
+    marginTop: '15px',
+    padding: '15px',
+    background: '#fff3cd',
+    borderRadius: '8px',
+    border: '1px solid #ffeaa7'
+  },
+  progressBar: {
+    height: '4px',
+    background: '#dee2e6',
+    borderRadius: '2px',
+    overflow: 'hidden',
+    marginBottom: '8px'
+  },
+  progressFill: {
+    height: '100%',
+    background: 'linear-gradient(90deg, #007acc, #28a745)',
+    width: '100%',
+    animation: 'progress 2s ease-in-out infinite'
+  },
+  loadingText: {
+    fontSize: '12px',
+    color: '#856404',
+    textAlign: 'center',
+    fontWeight: '500'
+  },
+  enhancedResultsInfo: {
+    marginTop: '20px',
+    padding: '16px',
+    background: 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
+    borderRadius: '10px',
+    border: '2px solid #28a745',
+    boxShadow: '0 3px 10px rgba(40, 167, 69, 0.2)'
+  },
+  resultsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '12px'
+  },
+  resultsIcon: {
+    fontSize: '20px'
+  },
+  resultsText: {
+    flex: 1
+  },
+  resultsMain: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#155724',
+    marginBottom: '2px'
+  },
+  resultsDetail: {
+    fontSize: '12px',
+    color: '#6c757d'
+  },
+  actionButtons: {
+    display: 'flex',
+    gap: '8px'
+  },
+  primaryActionButton: {
+    padding: '12px 20px',
+    background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 3px 8px rgba(40, 167, 69, 0.3)'
+  },
+  enhancedClearButton: {
+    marginTop: '15px',
+    padding: '12px 20px',
+    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 3px 8px rgba(220, 53, 69, 0.3)'
+  },
+  clearIcon: {
+    fontSize: '16px'
+  },
+  disabledButton: {
+    background: '#6c757d !important',
+    cursor: 'not-allowed !important',
+    boxShadow: 'none !important'
+  },
+
+  // Welcome message styles
+  welcomeMessage: {
+    background: 'linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%)',
+    padding: '20px',
+    borderRadius: '12px',
+    margin: '15px 0',
+    border: '2px solid #28a745',
+    textAlign: 'center',
+    boxShadow: '0 4px 12px rgba(40, 167, 69, 0.15)'
+  },
+  welcomeIcon: {
+    fontSize: '32px',
+    marginBottom: '10px'
+  },
+  welcomeTitle: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: '#155724',
+    margin: '0 0 8px 0'
+  },
+  welcomeText: {
+    fontSize: '13px',
+    color: '#155724',
+    margin: '0 0 15px 0',
+    lineHeight: '1.4'
+  },
+  welcomeSteps: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  step: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    textAlign: 'left'
+  },
+  stepNumber: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
+    background: '#28a745',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: '600',
+    flexShrink: 0
+  },
+  stepText: {
+    fontSize: '12px',
+    color: '#155724',
+    fontWeight: '500'
+  },
+
+  // Selected location info styles
+  selectedLocationInfo: {
+    background: 'linear-gradient(135deg, #cceeff 0%, #e6f3ff 100%)',
+    padding: '15px',
+    borderRadius: '10px',
+    margin: '15px 0',
+    border: '2px solid #007acc',
+    boxShadow: '0 3px 10px rgba(0, 122, 204, 0.15)'
+  },
+  locationHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  locationIcon: {
+    fontSize: '18px'
+  },
+  locationDetails: {
+    flex: 1
+  },
+  locationTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#0056b3',
+    marginBottom: '2px'
+  },
+  locationCoords: {
+    fontSize: '11px',
+    color: '#6c757d',
+    fontFamily: 'monospace'
+  },
+  changeLocationBtn: {
+    padding: '6px 10px',
+    background: 'transparent',
+    border: '1px solid #007acc',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    transition: 'all 0.2s ease'
   }
 };
 
-// CSS for spinner animation
-const spinKeyframes = `
+// CSS for spinner and progress animations
+const animationKeyframes = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
+  
+  @keyframes progress {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+  }
+  
+  .enhanced-search-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 122, 204, 0.4) !important;
+  }
+  
+  .primary-action-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4) !important;
+  }
+  
+  .enhanced-clear-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4) !important;
+  }
 `;
 
-// Inject CSS for spinner animation
+// Inject CSS for animations
 if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.textContent = spinKeyframes;
-  document.head.appendChild(style);
+  const existingStyle = document.querySelector('#catchment-animations');
+  if (!existingStyle) {
+    const style = document.createElement('style');
+    style.id = 'catchment-animations';
+    style.textContent = animationKeyframes;
+    document.head.appendChild(style);
+  }
 }
 
 export default CatchmentSidebar;
