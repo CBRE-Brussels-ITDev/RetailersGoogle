@@ -11,7 +11,10 @@ const CatchmentResultsSidebar = ({
   catchmentData, 
   selectedLocation, 
   onGeneratePDF, 
-  isGeneratingPDF 
+  isGeneratingPDF,
+  onExportCatchmentExcel,
+  onExportPlacesExcel,
+  placesData
 }) => {
   const [activeTab, setActiveTab] = useState(0);
 
@@ -135,7 +138,24 @@ const CatchmentResultsSidebar = ({
   };
 
   return (
-    <div style={styles.sidebar}>
+    <>
+      <style>
+        {`
+          .results-sidebar-pdf-btn:hover {
+            background-color: #c0392b !important;
+            transform: translateY(-1px);
+          }
+          .results-sidebar-excel-btn:hover {
+            background-color: #218838 !important;
+            transform: translateY(-1px);
+          }
+          .results-sidebar-close-btn:hover {
+            background-color: #f0f0f0 !important;
+            color: #333 !important;
+          }
+        `}
+      </style>
+      <div style={styles.sidebar}>
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerContent}>
@@ -148,17 +168,50 @@ const CatchmentResultsSidebar = ({
           </div>
         </div>
         <div style={styles.headerActions}>
+          <div style={styles.exportButtons}>
+            <button 
+              className="results-sidebar-pdf-btn"
+              onClick={onGeneratePDF}
+              disabled={isGeneratingPDF}
+              style={{
+                ...styles.pdfButton,
+                opacity: isGeneratingPDF ? 0.6 : 1
+              }}
+            >
+              {isGeneratingPDF ? '📄 Generating...' : '📄 PDF'}
+            </button>
+            <button
+              className="results-sidebar-excel-btn"
+              onClick={() => onExportCatchmentExcel && onExportCatchmentExcel()}
+              disabled={isGeneratingPDF}
+              style={{
+                ...styles.excelButton,
+                opacity: isGeneratingPDF ? 0.6 : 1
+              }}
+            >
+              📊 Catchment
+            </button>
+            {placesData && placesData.length > 0 && (
+              <button
+                className="results-sidebar-excel-btn"
+                onClick={() => onExportPlacesExcel && onExportPlacesExcel()}
+                disabled={isGeneratingPDF}
+                style={{
+                  ...styles.excelButton,
+                  opacity: isGeneratingPDF ? 0.6 : 1
+                }}
+              >
+                📊 Places
+              </button>
+            )}
+          </div>
           <button 
-            onClick={onGeneratePDF}
-            disabled={isGeneratingPDF}
-            style={{
-              ...styles.pdfButton,
-              opacity: isGeneratingPDF ? 0.6 : 1
-            }}
+            className="results-sidebar-close-btn"
+            style={styles.closeButton} 
+            onClick={onClose}
           >
-            {isGeneratingPDF ? '📄 Generating...' : '📄 PDF'}
+            ✕
           </button>
-          <button style={styles.closeButton} onClick={onClose}>✕</button>
         </div>
       </div>
 
@@ -357,6 +410,7 @@ const CatchmentResultsSidebar = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 
@@ -376,11 +430,13 @@ const styles = {
     fontFamily: 'Arial, sans-serif'
   },
   header: {
-    padding: '20px',
+    padding: '16px 20px',
     borderBottom: '1px solid #e0e0e0',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    flexDirection: 'column',
+    gap: '12px',
     backgroundColor: '#f8f9fa'
   },
   headerContent: {
@@ -402,27 +458,52 @@ const styles = {
   },
   headerActions: {
     display: 'flex',
-    gap: '10px',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%'
+  },
+  exportButtons: {
+    display: 'flex',
+    gap: '6px',
     alignItems: 'center'
   },
   pdfButton: {
-    padding: '8px 16px',
+    padding: '6px 12px',
     backgroundColor: '#e74c3c',
     color: 'white',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: '500',
-    transition: 'background-color 0.2s'
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap'
+  },
+  excelButton: {
+    padding: '6px 12px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap'
   },
   closeButton: {
     background: 'none',
     border: 'none',
-    fontSize: '18px',
+    fontSize: '16px',
     cursor: 'pointer',
     color: '#666',
-    padding: '8px'
+    padding: '8px',
+    borderRadius: '4px',
+    transition: 'all 0.2s ease',
+    ':hover': {
+      backgroundColor: '#f0f0f0',
+      color: '#333'
+    }
   },
   tabsContainer: {
     borderBottom: '1px solid #e0e0e0',

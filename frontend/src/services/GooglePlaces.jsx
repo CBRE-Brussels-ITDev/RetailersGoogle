@@ -1,7 +1,7 @@
 // Updated src/services/GooglePlaces.jsx
 import axios from 'axios';
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'https://coral-app-adar7.ondigitalocean.app';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://coral-app-adar7.ondigitalocean.app';
 
 const GooglePlacesService = {
     // Existing methods...
@@ -113,6 +113,63 @@ const GooglePlacesService = {
             return { success: true };
         } catch (error) {
             console.error('Error generating report:', error);
+            throw error;
+        }
+    },
+
+    // Export places data to Excel
+    async exportPlacesToExcel(places, searchParams) {
+        console.log('Exporting places to Excel:', { placesCount: places?.length, searchParams });
+        try {
+            const response = await axios.post(`${BASE_URL}/export-places-excel`, {
+                places,
+                searchParams
+            }, {
+                responseType: 'blob' // Important for Excel download
+            });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `CBRE_Places_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error exporting places to Excel:', error);
+            throw error;
+        }
+    },
+
+    // Export catchment data to Excel
+    async exportCatchmentToExcel(catchmentData, selectedLocation, placesData = null) {
+        console.log('Exporting catchment to Excel:', { catchmentCount: catchmentData?.length, selectedLocation, placesCount: placesData?.length });
+        try {
+            const response = await axios.post(`${BASE_URL}/export-catchment-excel`, {
+                catchmentData,
+                selectedLocation,
+                placesData
+            }, {
+                responseType: 'blob' // Important for Excel download
+            });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `CBRE_Catchment_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error exporting catchment to Excel:', error);
             throw error;
         }
     },

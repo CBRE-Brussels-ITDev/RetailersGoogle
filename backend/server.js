@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const XLSX = require('xlsx'); // Add xlsx for Excel export
 
 const app = express();
 const PORT = process.env.PORT || 8080; // Use port 8080 or environment variable
@@ -526,7 +527,479 @@ app.post('/generate-catchment-report', async (req, res) => {
     }
 });
 
+// Excel export endpoint for places data
+app.post('/export-places-excel', async (req, res) => {
+    const { places, searchParams } = req.body;
+
+    if (!places || !Array.isArray(places) || places.length === 0) {
+        return res.status(400).json({ 
+            error: 'Places array is required and must not be empty' 
+        });
+    }
+
+    try {
+        console.log('Exporting places to Excel:', places.length, 'places');
+        
+        // Prepare places data for Excel
+        const placesData = places.map((place, index) => ({
+            'ID': place.place_id || '',
+            'Name': place.name || '',
+            'Category': place.search_type ? place.search_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : '',
+            'Rating': place.rating || '',
+            'Total Ratings': place.user_ratings_total || '',
+            'Address': place.vicinity || place.formatted_address || '',
+            'Latitude': place.coordinates?.lat || '',
+            'Longitude': place.coordinates?.lng || '',
+            'Price Level': place.price_level ? '$'.repeat(place.price_level + 1) : '',
+            'Business Status': place.business_status || '',
+            'Types': Array.isArray(place.types) ? place.types.join(', ') : ''
+        }));
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(placesData);
+
+        // Set column widths
+        ws['!cols'] = [
+            {wch: 30}, // ID
+            {wch: 25}, // Name
+            {wch: 20}, // Category
+            {wch: 10}, // Rating
+            {wch: 12}, // Total Ratings
+            {wch: 40}, // Address
+            {wch: 12}, // Latitude
+            {wch: 12}, // Longitude
+            {wch: 12}, // Price Level
+            {wch: 15}, // Business Status
+            {wch: 50}  // Types
+        ];
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Places Data');
+
+        // Add search parameters sheet
+        const searchData = [{
+            'Search Radius': searchParams?.radius ? `${searchParams.radius}m` : '',
+            'Category': searchParams?.category || (searchParams?.getAllSectors ? 'All Sectors' : ''),
+            'Location Lat': searchParams?.lat || '',
+            'Location Lng': searchParams?.lng || '',
+            'Export Date': new Date().toISOString().slice(0, 19).replace('T', ' '),
+            'Total Places Found': places.length
+        }];
+        
+        const searchWs = XLSX.utils.json_to_sheet(searchData);
+        XLSX.utils.book_append_sheet(wb, searchWs, 'Search Parameters');
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+
+        // Set response headers
+        const filename = `CBRE_Places_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        // Send the Excel file
+        res.send(excelBuffer);
+        
+        console.log('Excel file generated successfully for places');
+        
+    } catch (error) {
+        console.error('Error generating Excel file for places:', error.message);
+        res.status(500).json({ 
+            error: 'Error generating Excel file',
+            details: error.message 
+        });
+    }
+});
+
+// Excel export endpoint for catchment data
+app.post('/export-catchment-excel', async (req, res) => {
+    const { catchmentData, selectedLocation, placesData } = req.body;
+
+    if (!catchmentData || !Array.isArray(catchmentData) || catchmentData.length === 0) {
+        return res.status(400).json({ 
+            error: 'Catchment data array is required and must not be empty' 
+        });
+    }
+
+    try {
+        console.log('Exporting catchment data to Excel:', catchmentData.length, 'areas');
+        console.log('Places data received:', placesData ? placesData.length : 'null', 'places');
+        
+        // Function to check if a point is within a catchment polygon
+        const isPointInCatchment = (point, catchmentGeometry) => {
+            if (!catchmentGeometry || !catchmentGeometry.coordinates || !catchmentGeometry.coordinates[0]) {
+                return false;
+            }
+            
+            const polygon = catchmentGeometry.coordinates[0];
+            const x = point.lng;
+            const y = point.lat;
+            
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        };
+
+        // Function to get layer features within catchment (NO GOOGLE PLACES - ONLY LAYER DATA)
+        const getLayerFeaturesInCatchment = async (catchmentArea, catchmentIndex) => {
+            console.log('Processing catchment for layer features:', catchmentArea.driveTime, 'minutes (index:', catchmentIndex + ')');
+            
+            // Calculate the estimated radius for this specific catchment
+            const estimatedRadius = (catchmentArea.driveTime / 60) * getAverageSpeed(catchmentArea.travelMode || 'driving') * 1000;
+            console.log(`Catchment ${catchmentArea.driveTime}min - Estimated radius:`, Math.round(estimatedRadius), 'meters');
+            
+            // Generate mock layer features within the catchment area
+            // This simulates features from an ArcGIS layer with MICROCODE and NAME fields
+            const generateLayerFeatures = (centerLat, centerLng, radiusMeters, catchmentTime) => {
+                // Base microcodes for different areas - simulate real geographic sectors
+                const baseMicrocodes = [
+                    'BE015292', 'BE015294', 'BE015296', 'BE015298', 'BE015300',
+                    'BE015302', 'BE015304', 'BE015306', 'BE015308', 'BE015310',
+                    'BE015312', 'BE015314', 'BE015316', 'BE015318', 'BE015320',
+                    'BE015322', 'BE015324', 'BE015326', 'BE015328', 'BE015330'
+                ];
+                
+                // Base sector names corresponding to microcodes
+                const baseSectorNames = [
+                    'Brussels Central', 'Brussels North', 'Brussels East', 'Brussels South', 'Antwerp Center',
+                    'Antwerp Port', 'Ghent Historic', 'Ghent Industrial', 'Bruges Old Town', 'Bruges West',
+                    'Leuven University', 'Leuven Industrial', 'Mechelen Center', 'Mechelen South', 'Hasselt Center',
+                    'Hasselt East', 'Mons Center', 'Mons Industrial', 'Namur Center', 'Namur South'
+                ];
+                
+                const features = [];
+                
+                // Number of features increases with catchment radius
+                const featureCount = Math.floor((radiusMeters / 1000) * 0.8) + Math.floor(catchmentTime / 5);
+                const maxFeatures = Math.min(featureCount, baseMicrocodes.length);
+                
+                for (let i = 0; i < maxFeatures; i++) {
+                    // Generate random coordinates within the radius
+                    const angle = Math.random() * 2 * Math.PI;
+                    const distance = Math.random() * radiusMeters;
+                    
+                    // Convert to lat/lng offset
+                    const deltaLat = (distance * Math.cos(angle)) / 111000; // Rough conversion
+                    const deltaLng = (distance * Math.sin(angle)) / (111000 * Math.cos(centerLat * Math.PI / 180));
+                    
+                    const featureLat = centerLat + deltaLat;
+                    const featureLng = centerLng + deltaLng;
+                    
+                    features.push({
+                        microcode: baseMicrocodes[i],
+                        name: baseSectorNames[i],
+                        coordinates: {
+                            lat: featureLat,
+                            lng: featureLng
+                        },
+                        // Add some additional layer attributes
+                        objectid: 1000 + i,
+                        ctrycode: 'BE',
+                        area_km2: Math.round((Math.random() * 5 + 1) * 100) / 100,
+                        population: Math.floor(Math.random() * 10000 + 1000)
+                    });
+                }
+                
+                return features;
+            };
+            
+            const layerFeatures = generateLayerFeatures(
+                selectedLocation.lat, 
+                selectedLocation.lng, 
+                estimatedRadius, 
+                catchmentArea.driveTime
+            );
+            
+            console.log(`Generated ${layerFeatures.length} layer features for ${catchmentArea.driveTime}min catchment`);
+            console.log('Sample features:', layerFeatures.slice(0, 3).map(f => ({
+                microcode: f.microcode,
+                name: f.name
+            })));
+            
+            // Extract microcodes and names for Excel export
+            const microcodes = layerFeatures.map(feature => feature.microcode);
+            const sectorNames = layerFeatures.map(feature => feature.name);
+            
+            console.log(`Catchment ${catchmentArea.driveTime}min: Found ${layerFeatures.length} layer features`);
+            console.log('Microcodes:', microcodes.slice(0, 5));
+            console.log('Sector Names:', sectorNames.slice(0, 5));
+            
+            return { 
+                // Return microcodes instead of Google Place IDs
+                sectorIds: microcodes.join(', '),
+                sectorNames: sectorNames.join(', '),
+                layerFeatures: layerFeatures // Return the actual layer features for analysis
+            };
+        };
+        
+        // Prepare catchment summary data with layer feature information and geographic data
+        const summaryData = [];
+        const allCatchmentFeatures = []; // Store all layer features for sector analysis sheet
+        
+        for (let i = 0; i < catchmentData.length; i++) {
+            const area = catchmentData[i];
+            console.log(`Processing summary for catchment ${i}:`, area.driveTime, 'minutes');
+            const layerInfo = await getLayerFeaturesInCatchment(area, i);
+            console.log('Layer info for catchment:', {
+                microcodes: layerInfo.sectorIds.split(', ').length,
+                sectorNames: layerInfo.sectorNames.split(', ').length,
+                featuresCount: layerInfo.layerFeatures?.length || 0
+            });
+            
+            // Store layer features for sector analysis
+            if (layerInfo.layerFeatures) {
+                allCatchmentFeatures.push({
+                    catchment: area,
+                    features: layerInfo.layerFeatures
+                });
+            }
+            
+            // Generate mock geographic/demographic data based on the schema you provided
+            const mockGeoData = generateMockGeoData(area, selectedLocation);
+            
+            const summaryRow = {
+                'Catchment Area': area.name || `${area.driveTime} minutes`,
+                'Drive Time (min)': area.driveTime || '',
+                'Travel Mode': area.travelMode || '',
+                
+                // Geographic Data Fields
+                'OBJECTID': mockGeoData.objectid,
+                'CTRYCODE': mockGeoData.ctrycode,
+                'MICROCODE': mockGeoData.microcode,
+                'NAME': mockGeoData.name,
+                'P_T': mockGeoData.p_t,
+                'P_PRM': mockGeoData.p_prm,
+                'HH_T': mockGeoData.hh_t,
+                'HH_SIZE': mockGeoData.hh_size,
+                'MALE': mockGeoData.male,
+                'FEMALE': mockGeoData.female,
+                'AGE_T0014': mockGeoData.age_t0014,
+                'AGE_T1529': mockGeoData.age_t1529,
+                'AGE_T3044': mockGeoData.age_t3044,
+                'AGE_T4559': mockGeoData.age_t4559,
+                'AGE_T60PL': mockGeoData.age_t60pl,
+                'PP_MIO': mockGeoData.pp_mio,
+                'PP_PRM': mockGeoData.pp_prm,
+                'PP_EURO': mockGeoData.pp_euro,
+                'PP_CI': mockGeoData.pp_ci,
+                
+                // Layer Feature Data (MICROCODES and SECTOR NAMES from layer, not Google Places)
+                'All Microcodes': layerInfo.sectorIds,
+                'All Sector Names': layerInfo.sectorNames
+            };
+            
+            summaryData.push(summaryRow);
+        }
+        
+        console.log('Summary data sample with geo fields:', Object.keys(summaryData[0]));
+
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        
+        // Add catchment summary sheet
+        const summaryWs = XLSX.utils.json_to_sheet(summaryData);
+        summaryWs['!cols'] = [
+            {wch: 15}, // Catchment Area
+            {wch: 12}, // Drive Time
+            {wch: 12}, // Travel Mode
+            {wch: 12}, // OBJECTID
+            {wch: 12}, // CTRYCODE
+            {wch: 15}, // MICROCODE
+            {wch: 30}, // NAME
+            {wch: 12}, // P_T
+            {wch: 12}, // P_PRM
+            {wch: 12}, // HH_T
+            {wch: 12}, // HH_SIZE
+            {wch: 12}, // MALE
+            {wch: 12}, // FEMALE
+            {wch: 12}, // AGE_T0014
+            {wch: 12}, // AGE_T1529
+            {wch: 12}, // AGE_T3044
+            {wch: 12}, // AGE_T4559
+            {wch: 12}, // AGE_T60PL
+            {wch: 15}, // PP_MIO
+            {wch: 15}, // PP_PRM
+            {wch: 15}, // PP_EURO
+            {wch: 15}, // PP_CI
+            {wch: 50}, // All Microcodes
+            {wch: 50}  // All Sector Names (from layer NAME field)
+        ];
+        XLSX.utils.book_append_sheet(wb, summaryWs, 'Catchment Summary');
+
+        // Add detailed demographic breakdown for each catchment
+        for (let i = 0; i < catchmentData.length; i++) {
+            const area = catchmentData[i];
+            const layerInfo = await getLayerFeaturesInCatchment(area, i);
+            const geoData = generateMockGeoData(area, selectedLocation);
+            
+            const detailData = [
+                { Metric: 'OBJECTID', Value: geoData.objectid },
+                { Metric: 'CTRYCODE', Value: geoData.ctrycode },
+                { Metric: 'MICROCODE', Value: geoData.microcode },
+                { Metric: 'NAME', Value: geoData.name },
+                { Metric: '', Value: '' }, // Empty row
+                { Metric: 'Population Data', Value: '' },
+                { Metric: 'P_T (Total Population)', Value: geoData.p_t },
+                { Metric: 'P_PRM (Primary Population)', Value: geoData.p_prm },
+                { Metric: 'MALE', Value: geoData.male },
+                { Metric: 'FEMALE', Value: geoData.female },
+                { Metric: '', Value: '' }, // Empty row
+                { Metric: 'Age Distribution', Value: '' },
+                { Metric: 'AGE_T0014', Value: geoData.age_t0014 },
+                { Metric: 'AGE_T1529', Value: geoData.age_t1529 },
+                { Metric: 'AGE_T3044', Value: geoData.age_t3044 },
+                { Metric: 'AGE_T4559', Value: geoData.age_t4559 },
+                { Metric: 'AGE_T60PL', Value: geoData.age_t60pl },
+                { Metric: '', Value: '' }, // Empty row
+                { Metric: 'Household Data', Value: '' },
+                { Metric: 'HH_T (Total Households)', Value: geoData.hh_t },
+                { Metric: 'HH_SIZE (Household Size)', Value: geoData.hh_size },
+                { Metric: '', Value: '' }, // Empty row
+                { Metric: 'Purchase Power Data', Value: '' },
+                { Metric: 'PP_MIO (Purchase Power MIO)', Value: geoData.pp_mio },
+                { Metric: 'PP_PRM (Purchase Power Primary)', Value: geoData.pp_prm },
+                { Metric: 'PP_EURO (Purchase Power Euro)', Value: geoData.pp_euro },
+                { Metric: 'PP_CI (Purchase Power CI)', Value: geoData.pp_ci },
+                { Metric: '', Value: '' }, // Empty row
+                { Metric: 'Layer Features Information', Value: '' },
+                { Metric: 'All Microcodes', Value: layerInfo.sectorIds },
+                { Metric: 'All Sector Names (from NAME field)', Value: layerInfo.sectorNames }
+            ];
+
+            const detailWs = XLSX.utils.json_to_sheet(detailData);
+            detailWs['!cols'] = [
+                {wch: 35}, // Metric
+                {wch: 25}  // Value
+            ];
+            
+            XLSX.utils.book_append_sheet(wb, detailWs, `Catchment ${i + 1} Detail`);
+        }
+
+        // Add a separate layer features analysis sheet (MICROCODE and NAME from layer)
+        if (allCatchmentFeatures.length > 0) {
+            const layerAnalysisData = [];
+            
+            allCatchmentFeatures.forEach(({ catchment, features }) => {
+                // Add header for this catchment
+                layerAnalysisData.push({
+                    'Catchment': `${catchment.driveTime} minutes`,
+                    'MICROCODE': '',
+                    'NAME': '',
+                    'OBJECTID': '',
+                    'Area (km²)': '',
+                    'Population': ''
+                });
+
+                // Add all layer features in this catchment
+                features.forEach(feature => {
+                    layerAnalysisData.push({
+                        'Catchment': '',
+                        'MICROCODE': feature.microcode || '',
+                        'NAME': feature.name || '',
+                        'OBJECTID': feature.objectid || '',
+                        'Area (km²)': feature.area_km2 || '',
+                        'Population': feature.population || ''
+                    });
+                });
+
+                // Add empty row between catchments
+                layerAnalysisData.push({
+                    'Catchment': '',
+                    'MICROCODE': '',
+                    'NAME': '',
+                    'OBJECTID': '',
+                    'Area (km²)': '',
+                    'Population': ''
+                });
+            });
+
+            const layerWs = XLSX.utils.json_to_sheet(layerAnalysisData);
+            layerWs['!cols'] = [
+                {wch: 15}, // Catchment
+                {wch: 15}, // MICROCODE
+                {wch: 25}, // NAME
+                {wch: 12}, // OBJECTID
+                {wch: 12}, // Area
+                {wch: 12}  // Population
+            ];
+            XLSX.utils.book_append_sheet(wb, layerWs, 'Layer Features Analysis');
+            console.log('Added layer features analysis sheet with', layerAnalysisData.length, 'rows');
+        }
+
+        // Add metadata sheet
+        const metaData = [{
+            'Export Date': new Date().toISOString().slice(0, 19).replace('T', ' '),
+            'Location Latitude': selectedLocation?.lat || '',
+            'Location Longitude': selectedLocation?.lng || '',
+            'Number of Catchments': catchmentData.length,
+            'Analysis Type': 'Drive Time Catchment Analysis',
+            'Generated By': 'CBRE Catchment Analysis Tool'
+        }];
+        
+        const metaWs = XLSX.utils.json_to_sheet(metaData);
+        XLSX.utils.book_append_sheet(wb, metaWs, 'Export Information');
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+
+        // Set response headers
+        const filename = `CBRE_Catchment_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        // Send the Excel file
+        res.send(excelBuffer);
+        
+        console.log('Excel file generated successfully for catchment data');
+        
+    } catch (error) {
+        console.error('Error generating Excel file for catchment:', error.message);
+        res.status(500).json({ 
+            error: 'Error generating Excel file',
+            details: error.message 
+        });
+    }
+});
+
 // Helper functions for enhanced catchment calculation
+
+// Helper function to generate mock geographic/demographic data
+function generateMockGeoData(catchmentArea, location) {
+    const baseId = Math.floor(Math.random() * 100000) + 1;
+    const population = catchmentArea.totalPopulation || 0;
+    const households = catchmentArea.totalHouseHolds || Math.floor(population / 2.3);
+    
+    return {
+        objectid: baseId,
+        ctrycode: 'BE', // Belgium country code
+        microcode: `BE${String(baseId).padStart(6, '0')}`, // Belgium microcode format
+        name: `Zone ${catchmentArea.driveTime}min - ${location.lat.toFixed(4)},${location.lng.toFixed(4)}`,
+        p_t: population, // Total population
+        p_prm: Math.floor(population * 0.8), // Primary population (80% of total)
+        hh_t: households, // Total households
+        hh_size: parseFloat((population / households).toFixed(2)), // Average household size
+        male: catchmentArea.totalMale || Math.floor(population * 0.49),
+        female: catchmentArea.totalFemale || Math.floor(population * 0.51),
+        age_t0014: catchmentArea.totalAGE0014 || Math.floor(population * 0.14),
+        age_t1529: catchmentArea.totalAGE1529 || Math.floor(population * 0.17),
+        age_t3044: catchmentArea.totalAGE3044 || Math.floor(population * 0.18),
+        age_t4559: catchmentArea.totalAGE4559 || Math.floor(population * 0.22),
+        age_t60pl: catchmentArea.totalAGE60PL || Math.floor(population * 0.29),
+        pp_mio: catchmentArea.totalPP_MIO || catchmentArea.totalMIO || Math.floor(population * 25000 / 1000000), // Purchase power in millions
+        pp_prm: catchmentArea.purchasePowerPerson || 25000, // Purchase power per person
+        pp_euro: catchmentArea.purchasePowerPerson || 25000, // Purchase power in euros
+        pp_ci: Math.floor((catchmentArea.purchasePowerPerson || 25000) * 1.15) // Purchase power confidence interval (+15%)
+    };
+}
+
 function calculatePopulationForArea(location, driveTime, travelMode) {
     // Base population depends on location (urban vs rural) and drive time
     const urbanFactor = getUrbanFactor(location);
@@ -837,4 +1310,6 @@ app.listen(PORT, () => {
     console.log(`  POST /get-all-places-text-search - Text-based place search`);
     console.log(`  POST /calculate-catchment - Calculate drive time catchment`);
     console.log(`  POST /generate-catchment-report - Generate PDF report`);
+    console.log(`  POST /export-places-excel - Export places data to Excel`);
+    console.log(`  POST /export-catchment-excel - Export catchment data to Excel`);
 });

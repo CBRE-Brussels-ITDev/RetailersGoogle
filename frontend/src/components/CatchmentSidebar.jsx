@@ -26,8 +26,7 @@ const CatchmentSidebar = ({
   showCatchmentMode,
   catchmentData,
   onClearAll,
-  onToggleMode,
-  onGeneratePDF
+  onToggleMode
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -213,46 +212,44 @@ const CatchmentSidebar = ({
 
   return (
     <div style={styles.sidebar}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerContent}>
-          <img src={logo} alt="CBRE" style={styles.logo} />
-          <div style={styles.titleContainer}>
-            <h4 style={styles.title}>
-              {showCatchmentMode ? 'CATCHMENT ANALYSIS' : 'PLACES SEARCH'}
-            </h4>
-            <button
-              onClick={onToggleMode}
-              style={{
-                ...styles.toggleModeButton,
-                backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545'
-              }}
-            >
-              {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
+        <div style={styles.header}>
+          <div style={styles.headerContent}>
+            <img src={logo} alt="CBRE" style={styles.logo} />
+            <div style={styles.titleContainer}>
+                <h4 style={styles.title}>
+                  {showCatchmentMode ? 'CATCHMENT ANALYSIS' : 'PLACES SEARCH'}
+                </h4>
+            </div>
+          </div>
+          <div style={styles.headerButtons}>
+            <button style={styles.closeButton} onClick={onClose}>
+          ✕
             </button>
           </div>
         </div>
-        <div style={styles.headerButtons}>
-          {/* PDF Generation Button - Only in catchment mode */}
-          {showCatchmentMode && catchmentData?.length > 0 && (
-            <button
-              onClick={onGeneratePDF}
-              disabled={isLoading}
-              style={{
-                ...styles.pdfButton,
-                opacity: isLoading ? 0.6 : 1
-              }}
-            >
-              📄 PDF
-            </button>
-          )}
-          <button style={styles.closeButton} onClick={onClose}>
-            ✕
+
+        {/* Toggle Mode Button at bottom */}
+        <div style={{
+          position: 'absolute',
+          bottom: 20,
+          left: 0,
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'center'
+        }}>
+          <button
+            onClick={onToggleMode}
+            style={{
+          ...styles.toggleModeButton,
+          backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545',
+          width: '90%'
+            }}
+          >
+            {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
           </button>
         </div>
-      </div>
 
-      {/* Location Status */}
+        {/* Location Status */}
       <div style={styles.locationSection}>
         {selectedLocation ? (
           <div style={styles.locationStatus}>
@@ -667,17 +664,6 @@ const styles = {
     display: 'flex',
     gap: '5px',
     alignItems: 'center'
-  },
-  pdfButton: {
-    padding: '6px 10px',
-    backgroundColor: '#e74c3c',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '11px',
-    fontWeight: '500',
-    transition: 'all 0.2s ease'
   },
   closeButton: {
     background: 'none',

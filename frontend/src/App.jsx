@@ -283,6 +283,47 @@ function App() {
     }
   };
 
+  // Excel Export Handlers
+  const handleExportPlacesExcel = async () => {
+    if (!searchResultsData || searchResultsData.length === 0) {
+      alert('No places data available to export');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await GooglePlacesService.exportPlacesToExcel(searchResultsData);
+    } catch (error) {
+      console.error('Error exporting places to Excel:', error);
+      alert('Error exporting places to Excel. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExportCatchmentExcel = async () => {
+    if (!catchmentData || catchmentData.length === 0) {
+      alert('No catchment data available to export');
+      return;
+    }
+
+    console.log('Exporting catchment with places data:', {
+      catchmentCount: catchmentData.length,
+      placesCount: searchResultsData?.length,
+      selectedLocation
+    });
+
+    try {
+      setIsLoading(true);
+      await GooglePlacesService.exportCatchmentToExcel(catchmentData, selectedLocation, searchResultsData);
+    } catch (error) {
+      console.error('Error exporting catchment to Excel:', error);
+      alert('Error exporting catchment to Excel. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw' }}>
       
@@ -402,7 +443,6 @@ function App() {
           catchmentData={catchmentData}
           onClearAll={clearSearch}
           onToggleMode={toggleCatchmentMode}
-          onGeneratePDF={handleGeneratePDF}
         />
       )}
 
@@ -424,6 +464,9 @@ function App() {
           selectedLocation={selectedLocation}
           onGeneratePDF={handleGeneratePDF}
           isGeneratingPDF={isLoading}
+          onExportCatchmentExcel={handleExportCatchmentExcel}
+          onExportPlacesExcel={handleExportPlacesExcel}
+          placesData={searchResultsData}
         />
       )}
 
