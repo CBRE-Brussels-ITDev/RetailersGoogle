@@ -353,6 +353,7 @@ app.post('/calculate-catchment', async (req, res) => {
         });
 
         console.log(`Generated ${catchmentResults.length} catchment areas`);
+        console.log('BACKEND: Catchment data structure:', JSON.stringify(catchmentResults, null, 2));
         
         res.json({ 
             catchmentResults,

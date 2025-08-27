@@ -1,6 +1,15 @@
 import React, { useState, useMemo } from 'react';
 
-const PlacesSidebar = ({ visible, places, onPlaceClick, onClose, selectedLocation, isLoading }) => {
+const PlacesSidebar = ({ 
+  visible, 
+  places, 
+  onPlaceClick, 
+  onClose, 
+  selectedLocation, 
+  isLoading,
+  onShowCommerceAnalysis,  // New prop for triggering commerce analysis
+  onExportReport          // New prop for export functionality
+}) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [sortBy, setSortBy] = useState('name'); // name, rating, distance, type
   const [filterByType, setFilterByType] = useState('all');
@@ -109,9 +118,37 @@ const PlacesSidebar = ({ visible, places, onPlaceClick, onClose, selectedLocatio
         <h3 style={styles.title}>
           Found Places ({filteredAndSortedPlaces.length})
         </h3>
-        <button style={styles.closeButton} onClick={onClose}>
-          ✕
-        </button>
+        <div style={styles.headerActions}>
+          {/* Quick Analysis & Export Buttons */}
+          {places.length > 0 && (
+            <div style={styles.quickActions}>
+              <button 
+                style={styles.analysisButton} 
+                onClick={() => onShowCommerceAnalysis && onShowCommerceAnalysis()}
+                title="Generate Commerce Analysis"
+              >
+                📊 Analyze
+              </button>
+              <button 
+                style={styles.exportButton} 
+                onClick={() => onExportReport && onExportReport('pdf', { places: filteredAndSortedPlaces, location: selectedLocation })}
+                title="Export PDF Report"
+              >
+                📄 PDF
+              </button>
+              <button 
+                style={styles.exportButton} 
+                onClick={() => onExportReport && onExportReport('excel', { places: filteredAndSortedPlaces, location: selectedLocation })}
+                title="Export Excel Report"
+              >
+                📊 Excel
+              </button>
+            </div>
+          )}
+          <button style={styles.closeButton} onClick={onClose}>
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Controls */}
@@ -162,6 +199,28 @@ const PlacesSidebar = ({ visible, places, onPlaceClick, onClose, selectedLocatio
 
       {/* Places List */}
       <div style={styles.placesList}>
+        {/* Quick Summary */}
+        {places.length > 0 && !isLoading && (
+          <div style={styles.quickSummary}>
+            <div style={styles.summaryGrid}>
+              <div style={styles.summaryCard}>
+                <div style={styles.summaryValue}>{filteredAndSortedPlaces.length}</div>
+                <div style={styles.summaryLabel}>Total Places</div>
+              </div>
+              <div style={styles.summaryCard}>
+                <div style={styles.summaryValue}>{placeTypes.length}</div>
+                <div style={styles.summaryLabel}>Categories</div>
+              </div>
+              <div style={styles.summaryCard}>
+                <div style={styles.summaryValue}>
+                  {filteredAndSortedPlaces.filter(p => p.rating >= 4.0).length}
+                </div>
+                <div style={styles.summaryLabel}>High Rated</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {filteredAndSortedPlaces.map((place, index) => (
           <div
             key={place.place_id}
@@ -280,6 +339,39 @@ const styles = {
     alignItems: 'center',
     backgroundColor: '#f8f9fa'
   },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  quickActions: {
+    display: 'flex',
+    gap: '6px'
+  },
+  analysisButton: {
+    padding: '6px 12px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap'
+  },
+  exportButton: {
+    padding: '6px 10px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap'
+  },
   title: {
     margin: 0,
     fontSize: '16px',
@@ -334,6 +426,37 @@ const styles = {
     flex: 1,
     overflowY: 'auto',
     padding: '10px'
+  },
+  quickSummary: {
+    padding: '15px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    marginBottom: '15px',
+    border: '1px solid #e9ecef'
+  },
+  summaryGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '10px'
+  },
+  summaryCard: {
+    textAlign: 'center',
+    padding: '10px',
+    backgroundColor: 'white',
+    borderRadius: '6px',
+    border: '1px solid #dee2e6'
+  },
+  summaryValue: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#007bff',
+    marginBottom: '4px'
+  },
+  summaryLabel: {
+    fontSize: '11px',
+    color: '#666',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
   },
   placeItem: {
     display: 'flex',

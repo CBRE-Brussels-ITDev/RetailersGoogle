@@ -739,6 +739,389 @@ const CommerceIntelligenceService = {
         }
         
         return opportunities;
+    },
+
+    // ENHANCED DEMOGRAPHIC ANALYSIS METHODS
+    
+    /**
+     * Calculate Business-Demographic Fit Score
+     * Analyzes how well a business type matches the demographic profile
+     */
+    calculateDemographicFit(commerceType, demographicData) {
+        if (!demographicData || demographicData.length === 0) {
+            return { fitScore: 50, insights: ['Limited demographic data available'] };
+        }
+
+        const totalPopulation = demographicData.reduce((sum, area) => sum + (area.totalPopulation || 0), 0);
+        const totalHouseholds = demographicData.reduce((sum, area) => sum + (area.totalHouseHolds || 0), 0);
+        const avgPurchasePower = demographicData.reduce((sum, area) => sum + (area.purchasePowerPerson || 0), 0) / demographicData.length;
+
+        // Calculate weighted demographic averages
+        const weightedDemographics = this.calculateWeightedDemographics(demographicData);
+        
+        // Business-specific demographic fit scoring
+        const fitScores = {
+            restaurant: this.calculateRestaurantFit(weightedDemographics, avgPurchasePower),
+            retail_store: this.calculateRetailFit(weightedDemographics, avgPurchasePower),
+            grocery_or_supermarket: this.calculateGroceryFit(weightedDemographics, totalHouseholds),
+            pharmacy: this.calculatePharmacyFit(weightedDemographics),
+            bank: this.calculateBankFit(weightedDemographics, avgPurchasePower),
+            bakery: this.calculateBakeryFit(weightedDemographics, totalHouseholds),
+            clothing_store: this.calculateClothingFit(weightedDemographics, avgPurchasePower),
+            beauty_salon: this.calculateBeautyFit(weightedDemographics, avgPurchasePower),
+            gym: this.calculateGymFit(weightedDemographics, avgPurchasePower),
+            gas_station: this.calculateGasStationFit(weightedDemographics, totalPopulation)
+        };
+
+        const businessFit = fitScores[commerceType] || { score: 50, factors: [] };
+        
+        return {
+            fitScore: Math.round(businessFit.score),
+            level: this.getFitLevel(businessFit.score),
+            insights: businessFit.factors,
+            populationInsights: this.generatePopulationInsights(totalPopulation, totalHouseholds, avgPurchasePower),
+            ageSegmentAnalysis: this.analyzeAgeSegments(weightedDemographics, commerceType),
+            purchasingPowerAnalysis: this.analyzePurchasingPower(avgPurchasePower, commerceType)
+        };
+    },
+
+    calculateWeightedDemographics(demographicData) {
+        const totalPop = demographicData.reduce((sum, area) => sum + area.totalPopulation, 0);
+        
+        return {
+            age0014: demographicData.reduce((sum, area) => sum + (area.totalAGE0014 * area.totalPopulation / totalPop), 0) / totalPop * 100,
+            age1529: demographicData.reduce((sum, area) => sum + (area.totalAGE1529 * area.totalPopulation / totalPop), 0) / totalPop * 100,
+            age3044: demographicData.reduce((sum, area) => sum + (area.totalAGE3044 * area.totalPopulation / totalPop), 0) / totalPop * 100,
+            age4559: demographicData.reduce((sum, area) => sum + (area.totalAGE4559 * area.totalPopulation / totalPop), 0) / totalPop * 100,
+            age60plus: demographicData.reduce((sum, area) => sum + (area.totalAGE60PL * area.totalPopulation / totalPop), 0) / totalPop * 100,
+            femalePercent: demographicData.reduce((sum, area) => sum + (area.pourcentWomen * area.totalPopulation / totalPop), 0) / totalPop * 100,
+            malePercent: demographicData.reduce((sum, area) => sum + (area.pourcentMan * area.totalPopulation / totalPop), 0) / totalPop * 100
+        };
+    },
+
+    // Business-specific demographic fit calculations
+    calculateRestaurantFit(demographics, purchasePower) {
+        let score = 50;
+        const factors = [];
+
+        // Age factors
+        if (demographics.age1529 > 25) {
+            score += 15;
+            factors.push('High young adult population (25-29) - excellent for casual dining');
+        }
+        if (demographics.age3044 > 30) {
+            score += 20;
+            factors.push('Strong family demographic (30-44) - ideal for family restaurants');
+        }
+        
+        // Purchase power factors
+        if (purchasePower > 35000) {
+            score += 15;
+            factors.push('High purchasing power supports premium dining options');
+        } else if (purchasePower > 25000) {
+            score += 10;
+            factors.push('Moderate purchasing power suitable for mid-range dining');
+        }
+
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateRetailFit(demographics, purchasePower) {
+        let score = 50;
+        const factors = [];
+
+        if (demographics.age1529 + demographics.age3044 > 50) {
+            score += 20;
+            factors.push('High concentration of prime shopping age groups (15-44)');
+        }
+        
+        if (demographics.femalePercent > 52) {
+            score += 10;
+            factors.push('Female-majority population typically drives higher retail spending');
+        }
+        
+        if (purchasePower > 30000) {
+            score += 15;
+            factors.push('Strong purchasing power supports retail consumption');
+        }
+
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateGroceryFit(demographics, totalHouseholds) {
+        let score = 60; // Base score higher for essential service
+        const factors = [];
+
+        if (demographics.age3044 > 25) {
+            score += 15;
+            factors.push('High family age group (30-44) - consistent grocery demand');
+        }
+        
+        if (totalHouseholds > 5000) {
+            score += 10;
+            factors.push('Large household base supports grocery business');
+        }
+
+        factors.push('Essential service with consistent demand regardless of demographics');
+        
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculatePharmacyFit(demographics) {
+        let score = 55;
+        const factors = [];
+
+        if (demographics.age60plus > 20) {
+            score += 20;
+            factors.push('High senior population (60+) drives pharmacy demand');
+        }
+        
+        if (demographics.age3044 > 25) {
+            score += 10;
+            factors.push('Family demographic increases health and wellness spending');
+        }
+
+        factors.push('Healthcare is essential - stable demand across all demographics');
+        
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateBankFit(demographics, purchasePower) {
+        let score = 50;
+        const factors = [];
+
+        if (demographics.age3044 + demographics.age4559 > 45) {
+            score += 15;
+            factors.push('High concentration of prime banking age groups (30-59)');
+        }
+        
+        if (purchasePower > 30000) {
+            score += 20;
+            factors.push('High income population needs comprehensive banking services');
+        }
+
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateGymFit(demographics, purchasePower) {
+        let score = 45;
+        const factors = [];
+
+        if (demographics.age1529 > 20) {
+            score += 20;
+            factors.push('High young adult population - core gym demographic');
+        }
+        
+        if (demographics.age3044 > 25) {
+            score += 15;
+            factors.push('Professional age group (30-44) values fitness and wellness');
+        }
+        
+        if (purchasePower > 30000) {
+            score += 15;
+            factors.push('Higher income supports gym membership and wellness spending');
+        }
+
+        return { score: Math.min(100, score), factors };
+    },
+
+    // Additional business fit calculations...
+    calculateBakeryFit(demographics, totalHouseholds) {
+        let score = 55;
+        const factors = [];
+        
+        if (demographics.age3044 > 25) {
+            score += 15;
+            factors.push('Family demographic drives bakery and specialty food demand');
+        }
+        
+        factors.push('Community-oriented business benefits from residential density');
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateClothingFit(demographics, purchasePower) {
+        let score = 45;
+        const factors = [];
+        
+        if (demographics.age1529 + demographics.age3044 > 50) {
+            score += 20;
+            factors.push('High fashion-conscious age groups (15-44)');
+        }
+        
+        if (purchasePower > 28000) {
+            score += 15;
+            factors.push('Sufficient purchasing power for clothing retail');
+        }
+        
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateBeautyFit(demographics, purchasePower) {
+        let score = 50;
+        const factors = [];
+        
+        if (demographics.femalePercent > 53) {
+            score += 15;
+            factors.push('Female-majority population drives beauty service demand');
+        }
+        
+        if (demographics.age1529 + demographics.age3044 > 45) {
+            score += 15;
+            factors.push('Prime beauty service age groups well represented');
+        }
+        
+        return { score: Math.min(100, score), factors };
+    },
+
+    calculateGasStationFit(demographics, totalPopulation) {
+        let score = 60; // Essential service
+        const factors = [];
+        
+        if (totalPopulation > 10000) {
+            score += 15;
+            factors.push('High population density supports fuel demand');
+        }
+        
+        factors.push('Essential service with consistent demand from vehicle traffic');
+        return { score: Math.min(100, score), factors };
+    },
+
+    getFitLevel(score) {
+        if (score >= 80) return 'Excellent Fit';
+        if (score >= 65) return 'Good Fit';
+        if (score >= 50) return 'Moderate Fit';
+        if (score >= 35) return 'Poor Fit';
+        return 'Very Poor Fit';
+    },
+
+    generatePopulationInsights(totalPop, totalHouseholds, avgPurchasePower) {
+        const insights = [];
+        
+        if (totalPop > 25000) {
+            insights.push(`Large market size (${this.formatNumber(totalPop)} people) provides strong customer base`);
+        } else if (totalPop > 10000) {
+            insights.push(`Moderate market size (${this.formatNumber(totalPop)} people) - suitable for community-focused business`);
+        } else {
+            insights.push(`Small market size (${this.formatNumber(totalPop)} people) - requires specialized or essential services`);
+        }
+        
+        const avgHouseholdSize = totalPop / totalHouseholds;
+        if (avgHouseholdSize > 2.5) {
+            insights.push(`Large households (${avgHouseholdSize.toFixed(1)} people/household) indicate family-oriented community`);
+        }
+        
+        if (avgPurchasePower > 35000) {
+            insights.push(`High purchasing power (€${this.formatNumber(avgPurchasePower)}/person) supports premium offerings`);
+        } else if (avgPurchasePower > 25000) {
+            insights.push(`Moderate purchasing power (€${this.formatNumber(avgPurchasePower)}/person) suits mid-market positioning`);
+        }
+        
+        return insights;
+    },
+
+    analyzeAgeSegments(demographics, commerceType) {
+        const segments = [
+            { name: 'Youth & Students (0-14)', percentage: demographics.age0014, relevance: 'Low' },
+            { name: 'Young Adults (15-29)', percentage: demographics.age1529, relevance: 'High' },
+            { name: 'Professionals (30-44)', percentage: demographics.age3044, relevance: 'Very High' },
+            { name: 'Established Adults (45-59)', percentage: demographics.age4559, relevance: 'High' },
+            { name: 'Seniors (60+)', percentage: demographics.age60plus, relevance: 'Moderate' }
+        ];
+
+        // Adjust relevance based on business type
+        if (commerceType === 'pharmacy' || commerceType === 'grocery_or_supermarket') {
+            segments[4].relevance = 'High'; // Seniors more relevant
+        }
+        if (commerceType === 'gym' || commerceType === 'clothing_store') {
+            segments[1].relevance = 'Very High'; // Young adults more relevant
+        }
+
+        return segments.sort((a, b) => b.percentage - a.percentage);
+    },
+
+    analyzePurchasingPower(avgPurchasePower, commerceType) {
+        const analysis = {
+            level: 'Moderate',
+            annualSpending: avgPurchasePower * 0.7, // Assume 70% of income is spendable
+            businessRelevance: 'Moderate'
+        };
+
+        if (avgPurchasePower > 40000) {
+            analysis.level = 'High';
+            analysis.businessRelevance = 'Excellent';
+        } else if (avgPurchasePower > 30000) {
+            analysis.level = 'Above Average';
+            analysis.businessRelevance = 'Good';
+        } else if (avgPurchasePower < 20000) {
+            analysis.level = 'Below Average';
+            analysis.businessRelevance = 'Challenging';
+        }
+
+        return analysis;
+    },
+
+    /**
+     * Calculate Revenue Potential using demographic data
+     */
+    calculateRevenueProjections(commerceType, demographicData, competitorData) {
+        if (!demographicData || demographicData.length === 0) {
+            return { error: 'No demographic data available for revenue calculations' };
+        }
+
+        const totalPopulation = demographicData.reduce((sum, area) => sum + area.totalPopulation, 0);
+        const totalHouseholds = demographicData.reduce((sum, area) => sum + area.totalHouseHolds, 0);
+        const avgPurchasePower = demographicData.reduce((sum, area) => sum + area.purchasePowerPerson, 0) / demographicData.length;
+
+        // Industry-specific spending patterns
+        const spendingPatterns = {
+            restaurant: { perCapitaAnnual: 1200, frequency: 'weekly', marketShare: 0.05 },
+            retail_store: { perCapitaAnnual: 800, frequency: 'monthly', marketShare: 0.03 },
+            grocery_or_supermarket: { perCapitaAnnual: 2500, frequency: 'weekly', marketShare: 0.15 },
+            pharmacy: { perCapitaAnnual: 400, frequency: 'monthly', marketShare: 0.08 },
+            bank: { perCapitaAnnual: 200, frequency: 'quarterly', marketShare: 0.10 },
+            bakery: { perCapitaAnnual: 300, frequency: 'weekly', marketShare: 0.04 },
+            clothing_store: { perCapitaAnnual: 600, frequency: 'quarterly', marketShare: 0.02 },
+            beauty_salon: { perCapitaAnnual: 400, frequency: 'monthly', marketShare: 0.06 },
+            gym: { perCapitaAnnual: 480, frequency: 'monthly', marketShare: 0.08 },
+            gas_station: { perCapitaAnnual: 1000, frequency: 'weekly', marketShare: 0.12 }
+        };
+
+        const pattern = spendingPatterns[commerceType] || spendingPatterns.retail_store;
+        
+        // Adjust for local purchasing power
+        const purchasePowerFactor = Math.min(1.5, avgPurchasePower / 30000);
+        const adjustedSpending = pattern.perCapitaAnnual * purchasePowerFactor;
+
+        // Calculate market potential
+        const marketPotential = totalPopulation * adjustedSpending;
+        
+        // Adjust for competition
+        const competitorCount = competitorData?.competitorCount || 0;
+        const competitionFactor = competitorCount === 0 ? 1 : Math.max(0.2, 1 / (1 + competitorCount * 0.3));
+        
+        const captureableMarket = marketPotential * pattern.marketShare * competitionFactor;
+        
+        return {
+            totalMarketPotential: Math.round(marketPotential),
+            captureableMarket: Math.round(captureableMarket),
+            estimatedAnnualRevenue: Math.round(captureableMarket * 0.8), // Conservative estimate
+            monthlyRevenue: Math.round(captureableMarket * 0.8 / 12),
+            revenuePerCustomer: Math.round(adjustedSpending),
+            projectedCustomerBase: Math.round(captureableMarket / adjustedSpending),
+            confidence: competitorCount === 0 ? 'High' : competitorCount < 3 ? 'Moderate' : 'Low',
+            factors: {
+                populationBase: totalPopulation,
+                householdBase: totalHouseholds,
+                avgPurchasePower: avgPurchasePower,
+                competitorCount: competitorCount,
+                purchasePowerFactor: purchasePowerFactor.toFixed(2),
+                competitionFactor: competitionFactor.toFixed(2)
+            }
+        };
+    },
+
+    formatNumber(num) {
+        return new Intl.NumberFormat().format(Math.round(num));
     }
 };
 

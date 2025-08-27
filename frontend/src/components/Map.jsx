@@ -431,14 +431,35 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     const points = [];
     const numberOfPoints = 60;
     
-    // Convert radius from meters to degrees (approximate)
-    const radiusDegrees = radiusMeters / 111320; // roughly 111,320 meters per degree
+    // Earth's radius in meters
+    const EARTH_RADIUS = 6378137;
+    
+    // Convert center point to radians
+    const centerLat = centerPoint.latitude * Math.PI / 180;
+    const centerLng = centerPoint.longitude * Math.PI / 180;
+    
+    // Calculate angular distance
+    const angularDistance = radiusMeters / EARTH_RADIUS;
 
     for (let i = 0; i < numberOfPoints; i++) {
-      const angle = (i / numberOfPoints) * 2 * Math.PI;
-      const x = centerPoint.longitude + radiusDegrees * Math.cos(angle);
-      const y = centerPoint.latitude + radiusDegrees * Math.sin(angle);
-      points.push([x, y]);
+      const bearing = (i / numberOfPoints) * 2 * Math.PI;
+      
+      // Calculate geodesic point using spherical trigonometry
+      const lat = Math.asin(
+        Math.sin(centerLat) * Math.cos(angularDistance) +
+        Math.cos(centerLat) * Math.sin(angularDistance) * Math.cos(bearing)
+      );
+      
+      const lng = centerLng + Math.atan2(
+        Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(centerLat),
+        Math.cos(angularDistance) - Math.sin(centerLat) * Math.sin(lat)
+      );
+      
+      // Convert back to degrees
+      const latDeg = lat * 180 / Math.PI;
+      const lngDeg = lng * 180 / Math.PI;
+      
+      points.push([lngDeg, latDeg]);
     }
     
     // Close the polygon

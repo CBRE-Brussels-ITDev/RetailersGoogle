@@ -34,6 +34,42 @@ const CommerceRankingReport = ({
     { value: 'gym', label: 'Gym/Fitness', icon: '💪' }
   ];
 
+  // Auto-initialize report when analysisResults are provided from direct navigation
+  useEffect(() => {
+    console.log('CommerceRankingReport: useEffect triggered');
+    console.log('CommerceRankingReport: analysisResults:', analysisResults);
+    console.log('CommerceRankingReport: catchmentData prop:', catchmentData);
+    console.log('CommerceRankingReport: analysisResults.catchmentData:', analysisResults?.catchmentData);
+    
+    if (analysisResults && analysisResults.businessCategory) {
+      // Set the commerce type based on the analysis results
+      const categoryMapping = {
+        'restaurant': 'restaurant',
+        'food': 'restaurant', 
+        'meal_takeaway': 'restaurant',
+        'bakery': 'bakery',
+        'store': 'retail_store',
+        'clothing_store': 'clothing_store',
+        'grocery_or_supermarket': 'grocery_or_supermarket',
+        'pharmacy': 'pharmacy',
+        'bank': 'bank',
+        'gas_station': 'gas_station',
+        'beauty_salon': 'beauty_salon',
+        'gym': 'gym'
+      };
+
+      const mappedCategory = categoryMapping[analysisResults.businessCategory] || 'retail_store';
+      setSelectedCommerce(mappedCategory);
+
+      // Auto-generate the report
+      setTimeout(() => {
+        generateRankingReport();
+      }, 500); // Small delay to ensure state is updated
+      
+      console.log('Auto-initializing commerce report for category:', analysisResults.businessCategory);
+    }
+  }, [analysisResults]);
+
   // Generate comprehensive ranking report
   const generateRankingReport = async () => {
     if (!selectedLocation || !places) {
@@ -46,12 +82,29 @@ const CommerceRankingReport = ({
       console.log('Generating comprehensive ranking report for:', selectedCommerce);
 
       const reportData = {};
+      
+      // Enhanced analysis using catchment data if available
+      const usingEnhancedData = analysisResults?.dataSource === 'catchment_intersection' || 
+                               analysisResults?.dataSource === 'radius_catchment_intersection';
+      const enhancedCatchmentData = analysisResults?.catchmentData || catchmentData;
+      
+      console.log('Using enhanced catchment data:', usingEnhancedData, enhancedCatchmentData?.length || 0, 'catchments');
+      console.log('Data source:', analysisResults?.dataSource);
 
       // 1. Market Saturation Analysis
       if (reportSections.marketSaturation) {
         reportData.marketSaturation = CommerceIntelligenceService.calculateMarketSaturation(
           places, selectedCommerce, 1000
         );
+        
+        // Add enhanced insights if using catchment data
+        if (usingEnhancedData && enhancedCatchmentData?.length > 0) {
+          reportData.marketSaturation.enhancedInsights = {
+            catchmentCoverage: enhancedCatchmentData.length,
+            intersectionAnalysis: true,
+            detailLevel: 'enhanced'
+          };
+        }
       }
 
       // 2. Competitor Landscape Analysis
@@ -61,11 +114,33 @@ const CommerceRankingReport = ({
         );
       }
 
-      // 3. Customer Acquisition Potential
+      // 2.5. Demographic Fit Analysis (NEW)
+      if (analysisResults?.catchmentData && analysisResults.catchmentData.length > 0) {
+        reportData.demographicFit = CommerceIntelligenceService.calculateDemographicFit(
+          selectedCommerce, analysisResults.catchmentData
+        );
+        console.log('Demographic fit analysis:', reportData.demographicFit);
+      }
+
+      // 2.6. Revenue Projections with Demographics (NEW) 
+      if (analysisResults?.catchmentData && analysisResults.catchmentData.length > 0) {
+        reportData.revenueProjections = CommerceIntelligenceService.calculateRevenueProjections(
+          selectedCommerce, analysisResults.catchmentData, reportData.competitorAnalysis
+        );
+        console.log('Revenue projections:', reportData.revenueProjections);
+      }
+
+      // 3. Customer Acquisition Potential (Enhanced with catchment intersection)
       if (reportSections.customerPotential) {
         reportData.customerPotential = CommerceIntelligenceService.calculateCustomerAcquisitionPotential(
-          catchmentData, places, selectedCommerce
+          enhancedCatchmentData || catchmentData, places, selectedCommerce
         );
+        
+        // Add enhanced metrics when using catchment intersection data
+        if (usingEnhancedData) {
+          reportData.customerPotential.dataSource = 'catchment_intersection';
+          reportData.customerPotential.enhancedMetrics = true;
+        }
       }
 
       // 4. Foot Traffic Analysis
@@ -75,18 +150,29 @@ const CommerceRankingReport = ({
         );
       }
 
-      // 5. ROI Projections
+      // 5. ROI Projections (Enhanced with catchment data)
       if (reportSections.roiProjections && reportData.customerPotential) {
         reportData.roiProjections = CommerceIntelligenceService.calculateROIProjections(
           reportData.customerPotential, selectedCommerce
         );
+        
+        // Enhanced ROI calculations when using catchment intersection
+        if (usingEnhancedData) {
+          reportData.roiProjections.enhancedCalculations = true;
+          reportData.roiProjections.dataConfidence = 'high'; // Higher confidence with catchment data
+        }
       }
 
-      // 6. Market Opportunities
+      // 6. Market Opportunities (Enhanced with catchment intersection)
       if (reportSections.opportunities) {
         reportData.opportunities = CommerceIntelligenceService.identifyMarketOpportunities(
-          places, catchmentData, selectedLocation
+          places, enhancedCatchmentData || catchmentData, selectedLocation
         );
+        
+        if (usingEnhancedData) {
+          reportData.opportunities.enhancedAnalysis = true;
+          reportData.opportunities.intersectionBased = true;
+        }
       }
 
       // 7. Overall Site Score
@@ -361,7 +447,28 @@ const CommerceRankingReport = ({
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h2 style={styles.title}>📊 Commerce Location Ranking Report</h2>
+        <h2 style={styles.title}>
+          📊 {analysisResults?.analysisType === 'comprehensive_commerce' ? 
+               'Comprehensive Commerce Ranking' : 
+               'Commerce Location Ranking Report'}
+        </h2>
+        {analysisResults?.businessCategory && (
+          <div style={styles.categoryBadge}>
+            {analysisResults.summary?.primaryCategory || 'Business Analysis'}
+          </div>
+        )}
+        {analysisResults?.dataSource && (
+          <div style={styles.dataSourceIndicator}>
+            📊 Data Source: {
+              analysisResults.dataSource === 'catchment_intersection' ? '🎯 Enhanced Catchment Analysis' :
+              analysisResults.dataSource === 'places_search' ? '🔍 Places Search' :
+              '📍 Location Analysis'
+            }
+            {analysisResults.dataSource === 'catchment_intersection' && (
+              <span style={styles.enhancedBadge}> • Enhanced Data</span>
+            )}
+          </div>
+        )}
         <div style={styles.controls}>
           <select 
             value={selectedCommerce}
@@ -632,6 +739,264 @@ const CommerceRankingReport = ({
             </div>
           )}
 
+          {/* Enhanced Demographics Analysis */}
+          {analysisResults?.catchmentData && analysisResults.catchmentData.length > 0 && (
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>
+                📊 {analysisResults.dataSource === 'radius_catchment_intersection' ? 'Search Radius Demographics' : 'Market Demographics Analysis'}
+              </h3>
+              <div style={styles.demographicsContent}>
+                {analysisResults.catchmentData.map((catchment, index) => (
+                  <div key={index} style={styles.catchmentDemographics}>
+                    <h4 style={styles.catchmentTitle}>
+                      {catchment.isRadiusSearch ? 
+                        `🎯 ${catchment.name} Search Area - ${formatNumber(catchment.totalPopulation)} Total Population` :
+                        `🎯 ${catchment.name} Drive Time - ${formatNumber(catchment.totalPopulation)} Total Population`
+                      }
+                    </h4>
+                    
+                    <div style={styles.demographicsGrid}>
+                      {/* Gender Distribution */}
+                      <div style={styles.demoCard}>
+                        <h5>Gender Distribution</h5>
+                        <div style={styles.genderStats}>
+                          <div style={styles.genderItem}>
+                            <span>👩 Women: </span>
+                            <strong>{formatNumber(catchment.totalFemale)} ({catchment.pourcentWomen}%)</strong>
+                          </div>
+                          <div style={styles.genderItem}>
+                            <span>👨 Men: </span>
+                            <strong>{formatNumber(catchment.totalMale)} ({catchment.pourcentMan}%)</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Age Distribution */}
+                      <div style={styles.demoCard}>
+                        <h5>Age Groups</h5>
+                        <div style={styles.ageStats}>
+                          <div style={styles.ageItem}>
+                            <span>0-14: </span>
+                            <strong>{formatNumber(catchment.totalAGE0014)} ({catchment.pourcentAge0014}%)</strong>
+                          </div>
+                          <div style={styles.ageItem}>
+                            <span>15-29: </span>
+                            <strong>{formatNumber(catchment.totalAGE1529)} ({catchment.pourcentAge1529}%)</strong>
+                          </div>
+                          <div style={styles.ageItem}>
+                            <span>30-44: </span>
+                            <strong>{formatNumber(catchment.totalAGE3044)} ({catchment.pourcentAge3044}%)</strong>
+                          </div>
+                          <div style={styles.ageItem}>
+                            <span>45-59: </span>
+                            <strong>{formatNumber(catchment.totalAGE4559)} ({catchment.pourcentAge4559}%)</strong>
+                          </div>
+                          <div style={styles.ageItem}>
+                            <span>60+: </span>
+                            <strong>{formatNumber(catchment.totalAGE60PL)} ({catchment.pourcentAge60pl}%)</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Household & Economic Data */}
+                      <div style={styles.demoCard}>
+                        <h5>Economic Profile</h5>
+                        <div style={styles.economicStats}>
+                          <div style={styles.economicItem}>
+                            <span>🏠 Total Households: </span>
+                            <strong>{formatNumber(catchment.totalHouseHolds)}</strong>
+                          </div>
+                          <div style={styles.economicItem}>
+                            <span>👥 Avg Household Size: </span>
+                            <strong>{catchment.householdsMember} members</strong>
+                          </div>
+                          <div style={styles.economicItem}>
+                            <span>💰 Purchase Power/Person: </span>
+                            <strong>{formatCurrency(catchment.purchasePowerPerson)}</strong>
+                          </div>
+                          <div style={styles.economicItem}>
+                            <span>💳 Total Purchase Power: </span>
+                            <strong>{formatCurrency(catchment.totalPP_MIO * 1000000)}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Combined Demographics Summary */}
+                <div style={styles.combinedDemographics}>
+                  <h4 style={styles.summaryTitle}>📈 Combined Market Summary</h4>
+                  <div style={styles.combinedStats}>
+                    <div style={styles.combinedItem}>
+                      <span>Total Market Population: </span>
+                      <strong>{formatNumber(analysisResults.catchmentData.reduce((sum, c) => sum + c.totalPopulation, 0))}</strong>
+                    </div>
+                    <div style={styles.combinedItem}>
+                      <span>Total Households: </span>
+                      <strong>{formatNumber(analysisResults.catchmentData.reduce((sum, c) => sum + c.totalHouseHolds, 0))}</strong>
+                    </div>
+                    <div style={styles.combinedItem}>
+                      <span>Combined Purchase Power: </span>
+                      <strong>{formatCurrency(analysisResults.catchmentData.reduce((sum, c) => sum + (c.totalPP_MIO * 1000000), 0))}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Demographic-Business Fit Analysis */}
+          {rankingData.demographicFit && (
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>🎯 Business-Market Fit Analysis</h3>
+              <div style={styles.demographicFitContent}>
+                <div style={styles.fitScoreCard}>
+                  <h4>Market Fit Score</h4>
+                  <div style={styles.fitScore}>
+                    <span style={{...styles.bigNumber, color: rankingData.demographicFit.fitScore >= 70 ? '#28a745' : rankingData.demographicFit.fitScore >= 50 ? '#ffc107' : '#dc3545'}}>
+                      {rankingData.demographicFit.fitScore}/100
+                    </span>
+                    <div style={styles.fitLevel}>{rankingData.demographicFit.level}</div>
+                  </div>
+                </div>
+
+                <div style={styles.fitInsights}>
+                  <h4>📊 Market Analysis Insights:</h4>
+                  {rankingData.demographicFit.insights?.map((insight, index) => (
+                    <div key={index} style={styles.insightItem}>
+                      <span>✓ {insight}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={styles.populationInsights}>
+                  <h4>👥 Population Profile:</h4>
+                  {rankingData.demographicFit.populationInsights?.map((insight, index) => (
+                    <div key={index} style={styles.insightItem}>
+                      <span>• {insight}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {rankingData.demographicFit.ageSegmentAnalysis && (
+                  <div style={styles.ageSegmentAnalysis}>
+                    <h4>🎂 Age Segment Analysis:</h4>
+                    <div style={styles.segmentGrid}>
+                      {rankingData.demographicFit.ageSegmentAnalysis.map((segment, index) => (
+                        <div key={index} style={styles.segmentCard}>
+                          <div style={styles.segmentName}>{segment.name}</div>
+                          <div style={styles.segmentPercentage}>{segment.percentage.toFixed(1)}%</div>
+                          <div style={styles.segmentRelevance}>Relevance: {segment.relevance}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {rankingData.demographicFit.purchasingPowerAnalysis && (
+                  <div style={styles.purchasingPowerSection}>
+                    <h4>💰 Purchasing Power Analysis:</h4>
+                    <div style={styles.powerStats}>
+                      <div style={styles.powerItem}>
+                        <span>Income Level: </span>
+                        <strong>{rankingData.demographicFit.purchasingPowerAnalysis.level}</strong>
+                      </div>
+                      <div style={styles.powerItem}>
+                        <span>Est. Annual Spending: </span>
+                        <strong>{formatCurrency(rankingData.demographicFit.purchasingPowerAnalysis.annualSpending)}</strong>
+                      </div>
+                      <div style={styles.powerItem}>
+                        <span>Business Relevance: </span>
+                        <strong>{rankingData.demographicFit.purchasingPowerAnalysis.businessRelevance}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Enhanced Revenue Projections */}
+          {rankingData.revenueProjections && !rankingData.revenueProjections.error && (
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>💹 Market-Based Revenue Projections</h3>
+              <div style={styles.revenueProjectionsContent}>
+                <div style={styles.revenueOverview}>
+                  <div style={styles.revenueCard}>
+                    <h4>Total Market Potential</h4>
+                    <div style={styles.revenueNumber}>{formatCurrency(rankingData.revenueProjections.totalMarketPotential)}</div>
+                  </div>
+                  
+                  <div style={styles.revenueCard}>
+                    <h4>Capturable Market</h4>
+                    <div style={styles.revenueNumber}>{formatCurrency(rankingData.revenueProjections.captureableMarket)}</div>
+                  </div>
+                  
+                  <div style={styles.revenueCard}>
+                    <h4>Est. Annual Revenue</h4>
+                    <div style={{...styles.revenueNumber, color: '#28a745'}}>{formatCurrency(rankingData.revenueProjections.estimatedAnnualRevenue)}</div>
+                  </div>
+                  
+                  <div style={styles.revenueCard}>
+                    <h4>Monthly Revenue</h4>
+                    <div style={styles.revenueNumber}>{formatCurrency(rankingData.revenueProjections.monthlyRevenue)}</div>
+                  </div>
+                </div>
+
+                <div style={styles.customerProjections}>
+                  <h4>📈 Customer Base Projections:</h4>
+                  <div style={styles.customerStats}>
+                    <div style={styles.customerItem}>
+                      <span>Projected Customer Base: </span>
+                      <strong>{formatNumber(rankingData.revenueProjections.projectedCustomerBase)} customers</strong>
+                    </div>
+                    <div style={styles.customerItem}>
+                      <span>Revenue per Customer: </span>
+                      <strong>{formatCurrency(rankingData.revenueProjections.revenuePerCustomer)}/year</strong>
+                    </div>
+                    <div style={styles.customerItem}>
+                      <span>Confidence Level: </span>
+                      <strong style={{color: rankingData.revenueProjections.confidence === 'High' ? '#28a745' : rankingData.revenueProjections.confidence === 'Moderate' ? '#ffc107' : '#dc3545'}}>
+                        {rankingData.revenueProjections.confidence}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.projectionFactors}>
+                  <h4>🔍 Calculation Factors:</h4>
+                  <div style={styles.factorGrid}>
+                    <div style={styles.factorItem}>
+                      <span>Population Base: </span>
+                      <strong>{formatNumber(rankingData.revenueProjections.factors.populationBase)}</strong>
+                    </div>
+                    <div style={styles.factorItem}>
+                      <span>Household Base: </span>
+                      <strong>{formatNumber(rankingData.revenueProjections.factors.householdBase)}</strong>
+                    </div>
+                    <div style={styles.factorItem}>
+                      <span>Avg Purchase Power: </span>
+                      <strong>{formatCurrency(rankingData.revenueProjections.factors.avgPurchasePower)}</strong>
+                    </div>
+                    <div style={styles.factorItem}>
+                      <span>Competitors: </span>
+                      <strong>{rankingData.revenueProjections.factors.competitorCount}</strong>
+                    </div>
+                    <div style={styles.factorItem}>
+                      <span>Purchase Power Factor: </span>
+                      <strong>{rankingData.revenueProjections.factors.purchasePowerFactor}</strong>
+                    </div>
+                    <div style={styles.factorItem}>
+                      <span>Competition Impact: </span>
+                      <strong>{rankingData.revenueProjections.factors.competitionFactor}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ROI Projections */}
           {rankingData.roiProjections && !rankingData.roiProjections.error && (
             <div style={styles.section}>
@@ -725,21 +1090,22 @@ const CommerceRankingReport = ({
                 {rankingData.opportunities.slice(0, 6).map((opportunity, index) => (
                   <div key={index} style={{
                     ...styles.opportunityCard,
-                    borderLeftColor: opportunity.priority === 'high' ? '#28a745' : 
-                                   opportunity.priority === 'medium' ? '#ffc107' : '#17a2b8'
+                    borderLeftColor: (opportunity.priority === 'high') ? '#28a745' : 
+                                   (opportunity.priority === 'medium') ? '#ffc107' : '#17a2b8'
                   }}>
                     <div style={styles.opportunityHeader}>
-                      <span style={styles.opportunityType}>{opportunity.type}</span>
+                      <span style={styles.opportunityType}>{opportunity.type || 'Opportunity'}</span>
                       <span style={{
                         ...styles.opportunityPriority,
-                        backgroundColor: opportunity.priority === 'high' ? '#28a745' : 
-                                       opportunity.priority === 'medium' ? '#ffc107' : '#17a2b8'
+                        backgroundColor: (opportunity.priority === 'high') ? '#28a745' : 
+                                       (opportunity.priority === 'medium') ? '#ffc107' : 
+                                       (opportunity.priority === 'low') ? '#dc3545' : '#17a2b8'
                       }}>
-                        {opportunity.priority.toUpperCase()}
+                        {opportunity.priority ? opportunity.priority.toUpperCase() : 'MEDIUM'}
                       </span>
                     </div>
-                    <h5 style={styles.opportunityCategory}>{opportunity.category}</h5>
-                    <p style={styles.opportunityDescription}>{opportunity.opportunity}</p>
+                    <h5 style={styles.opportunityCategory}>{opportunity.category || 'General'}</h5>
+                    <p style={styles.opportunityDescription}>{opportunity.opportunity || 'No description available'}</p>
                   </div>
                 ))}
               </div>
@@ -799,6 +1165,33 @@ const styles = {
     marginBottom: '20px',
     fontSize: '28px',
     fontWeight: 'bold'
+  },
+  categoryBadge: {
+    display: 'inline-block',
+    padding: '6px 12px',
+    backgroundColor: '#e3f2fd',
+    color: '#1565c0',
+    borderRadius: '16px',
+    fontSize: '14px',
+    fontWeight: '500',
+    marginBottom: '15px',
+    border: '1px solid #bbdefb'
+  },
+  dataSourceIndicator: {
+    display: 'inline-block',
+    padding: '8px 14px',
+    backgroundColor: '#f0f8ff',
+    color: '#1976d2',
+    borderRadius: '20px',
+    fontSize: '13px',
+    fontWeight: '500',
+    marginBottom: '15px',
+    border: '1px solid #e3f2fd',
+    marginLeft: '10px'
+  },
+  enhancedBadge: {
+    color: '#2e7d32',
+    fontWeight: '600'
   },
   controls: {
     display: 'flex',
@@ -1248,6 +1641,260 @@ const styles = {
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: 'bold'
+  },
+  // Demographics styles
+  demographicsContent: {
+    gap: '20px'
+  },
+  catchmentDemographics: {
+    border: '1px solid #e0e0e0',
+    borderRadius: '10px',
+    padding: '20px',
+    marginBottom: '25px',
+    backgroundColor: '#fafafa'
+  },
+  catchmentTitle: {
+    color: '#2c5530',
+    marginBottom: '15px',
+    fontSize: '16px',
+    borderBottom: '2px solid #e0e0e0',
+    paddingBottom: '10px'
+  },
+  demographicsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '15px',
+    marginTop: '15px'
+  },
+  demoCard: {
+    backgroundColor: '#ffffff',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #e0e0e0'
+  },
+  genderStats: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  genderItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '5px 0'
+  },
+  ageStats: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  ageItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '3px 0',
+    fontSize: '13px'
+  },
+  economicStats: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  economicItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '5px 0'
+  },
+  combinedDemographics: {
+    marginTop: '20px',
+    padding: '20px',
+    backgroundColor: '#e8f4f8',
+    borderRadius: '10px',
+    border: '2px solid #b8daff'
+  },
+  summaryTitle: {
+    color: '#0066cc',
+    marginBottom: '15px',
+    fontSize: '16px'
+  },
+  combinedStats: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '10px'
+  },
+  combinedItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 12px',
+    backgroundColor: '#ffffff',
+    borderRadius: '6px',
+    border: '1px solid #cce7ff'
+  },
+  // Demographic Fit Analysis styles
+  demographicFitContent: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '20px'
+  },
+  fitScoreCard: {
+    backgroundColor: '#f8f9fa',
+    padding: '20px',
+    borderRadius: '10px',
+    textAlign: 'center',
+    border: '2px solid #e0e0e0'
+  },
+  fitScore: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  fitLevel: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#495057'
+  },
+  fitInsights: {
+    backgroundColor: '#e8f5e8',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #c3e6cb'
+  },
+  populationInsights: {
+    backgroundColor: '#e7f3ff',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #b8daff'
+  },
+  insightItem: {
+    padding: '5px 0',
+    fontSize: '14px',
+    lineHeight: '1.4'
+  },
+  ageSegmentAnalysis: {
+    backgroundColor: '#fff3cd',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #ffeeba'
+  },
+  segmentGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '10px',
+    marginTop: '10px'
+  },
+  segmentCard: {
+    backgroundColor: '#ffffff',
+    padding: '10px',
+    borderRadius: '6px',
+    border: '1px solid #dee2e6',
+    textAlign: 'center'
+  },
+  segmentName: {
+    fontSize: '12px',
+    fontWeight: 'bold',
+    marginBottom: '5px'
+  },
+  segmentPercentage: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#0066cc',
+    marginBottom: '3px'
+  },
+  segmentRelevance: {
+    fontSize: '11px',
+    color: '#6c757d'
+  },
+  purchasingPowerSection: {
+    backgroundColor: '#f0fff0',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #d4edda'
+  },
+  powerStats: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '10px',
+    marginTop: '10px'
+  },
+  powerItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 12px',
+    backgroundColor: '#ffffff',
+    borderRadius: '6px',
+    border: '1px solid #d4edda'
+  },
+  // Revenue Projections styles
+  revenueProjectionsContent: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '20px'
+  },
+  revenueOverview: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '15px',
+    marginBottom: '20px'
+  },
+  revenueCard: {
+    padding: '20px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    textAlign: 'center',
+    border: '1px solid #dee2e6'
+  },
+  revenueNumber: {
+    fontSize: '20px',
+    fontWeight: 'bold',
+    color: '#0066cc',
+    marginTop: '10px'
+  },
+  customerProjections: {
+    backgroundColor: '#e8f4f8',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #b8daff'
+  },
+  customerStats: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '10px',
+    marginTop: '10px'
+  },
+  customerItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 12px',
+    backgroundColor: '#ffffff',
+    borderRadius: '6px',
+    border: '1px solid #cce7ff'
+  },
+  projectionFactors: {
+    backgroundColor: '#fff8dc',
+    padding: '15px',
+    borderRadius: '8px',
+    border: '1px solid #ffeaa7'
+  },
+  factorGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '8px',
+    marginTop: '10px'
+  },
+  factorItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '6px 10px',
+    backgroundColor: '#ffffff',
+    borderRadius: '4px',
+    border: '1px solid #ddd',
+    fontSize: '13px'
   }
 };
 

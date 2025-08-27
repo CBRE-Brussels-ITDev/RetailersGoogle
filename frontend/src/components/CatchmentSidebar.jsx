@@ -29,10 +29,6 @@ const CatchmentSidebar = ({
   onToggleMode,
   onShowCommerceAnalysis  // New prop for commerce analysis
 }) => {
-  const [searchFilter, setSearchFilter] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [filterByType, setFilterByType] = useState('all');
-  
   // Places search form state
   const [radius, setRadius] = useState('1000');
   const [category, setCategory] = useState('restaurant');
@@ -184,47 +180,6 @@ const radiusOptions = [
     return R * c;
   };
 
-  // Filter and sort places
-  const filteredAndSortedPlaces = React.useMemo(() => {
-    let filtered = places.filter(place => {
-      const matchesSearch = !searchFilter || 
-        place.name?.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        place.vicinity?.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        place.search_type?.toLowerCase().includes(searchFilter.toLowerCase());
-      
-      const matchesType = filterByType === 'all' || place.search_type === filterByType;
-      
-      return matchesSearch && matchesType;
-    });
-
-    // Sort places
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return (a.name || '').localeCompare(b.name || '');
-        case 'rating':
-          return (b.rating || 0) - (a.rating || 0);
-        case 'distance':
-          if (!selectedLocation) return 0;
-          const distA = calculateDistance(
-            selectedLocation.lat, selectedLocation.lng,
-            a.coordinates.lat, a.coordinates.lng
-          );
-          const distB = calculateDistance(
-            selectedLocation.lat, selectedLocation.lng,
-            b.coordinates.lat, b.coordinates.lng
-          );
-          return distA - distB;
-        case 'type':
-          return (a.search_type || '').localeCompare(b.search_type || '');
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  }, [places, searchFilter, sortBy, filterByType, selectedLocation]);
-
   // Format distance
   const formatDistance = (place) => {
     if (!selectedLocation) return '';
@@ -235,10 +190,15 @@ const radiusOptions = [
     return distance < 1000 ? `${Math.round(distance)}m` : `${(distance/1000).toFixed(1)}km`;
   };
 
-  if (!visible) return null;
+  // Remove the visibility check to ensure sidebar always renders
+  // if (!visible) return null;
 
   return (
-    <div style={styles.sidebar}>
+    <div style={{
+      ...styles.sidebar,
+      transform: visible ? 'translateX(0)' : 'translateX(-100%)',
+      transition: 'transform 0.3s ease-in-out'
+    }}>
         <div style={styles.header}>
           <div style={styles.headerContent}>
             <img src={logo} alt="CBRE" style={styles.logo} />
@@ -275,19 +235,6 @@ const radiusOptions = [
             {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
           </button>
         </div>
-
-        {/* Location Status */}
-      <div style={styles.locationSection}>
-        {selectedLocation ? (
-          <div style={styles.locationStatus}>
-            📍 Location: {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
-          </div>
-        ) : (
-          <div style={styles.locationWarning}>
-            ⚠️ Click on the map to select a location
-          </div>
-        )}
-      </div>
 
       {/* Content based on mode */}
       {showCatchmentMode ? (
@@ -403,6 +350,25 @@ const radiusOptions = [
             </div>
           )}
 
+          {/* Enhanced Commerce Analysis Option when catchment data is available */}
+          {catchmentData && catchmentData.length > 0 && onShowCommerceAnalysis && (
+            <div style={styles.enhancedAnalysisSection}>
+              <div style={styles.enhancedAnalysisHeader}>
+                🎯 Enhanced Analysis Available
+              </div>
+              <div style={styles.enhancedAnalysisDescription}>
+                Your catchment areas contain rich business data. Get detailed commerce insights using intersection analysis.
+              </div>
+              <button
+                onClick={() => onShowCommerceAnalysis()}
+                style={styles.enhancedCommerceBtn}
+                className="enhanced-commerce-btn"
+              >
+                🏪 ⭐ Enhanced Commerce Analysis
+              </button>
+            </div>
+          )}
+
           {/* Clear Button - Only show if there's data to clear */}
           {(catchmentData?.length > 0 || selectedLocation) && (
             <button
@@ -415,67 +381,12 @@ const radiusOptions = [
         </div>
       ) : (
         // PLACES MODE - ENHANCED USER INTERFACE
-        <div style={styles.searchSection}>
+        <div style={styles.searchSection} className="search-section">
           <h5 style={styles.sectionTitle}>
             🔍 Smart Place Discovery
           </h5>
 
-          {/* Quick Search Tips */}
-          <div style={styles.searchTips}>
-            <div style={styles.tipHeader}>💡 Quick Tips:</div>
-            <div style={styles.tips}>
-              • Select location first, then choose search options
-              • Use "All Sectors" for comprehensive analysis
-              • Smaller radius = more focused results
-            </div>
-          </div>
-
-          {/* Welcome Message for New Users */}
-          {!selectedLocation && (
-            <div style={styles.welcomeMessage}>
-              <div style={styles.welcomeIcon}>🎯</div>
-              <h4 style={styles.welcomeTitle}>Ready to Discover?</h4>
-              <p style={styles.welcomeText}>
-                Click on the map to select your analysis location and unlock powerful business insights!
-              </p>
-              <div style={styles.welcomeSteps}>
-                <div style={styles.step}>
-                  <span style={styles.stepNumber}>1</span>
-                  <span style={styles.stepText}>Select location on map</span>
-                </div>
-                <div style={styles.step}>
-                  <span style={styles.stepNumber}>2</span>
-                  <span style={styles.stepText}>Choose search radius & type</span>
-                </div>
-                <div style={styles.step}>
-                  <span style={styles.stepNumber}>3</span>
-                  <span style={styles.stepText}>Analyze & export results</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Selected Location Display */}
-          {selectedLocation && (
-            <div style={styles.selectedLocationInfo}>
-              <div style={styles.locationHeader}>
-                <span style={styles.locationIcon}>✅</span>
-                <div style={styles.locationDetails}>
-                  <div style={styles.locationTitle}>Analysis Location Selected</div>
-                  <div style={styles.locationCoords}>
-                    {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
-                  </div>
-                </div>
-                <button 
-                  onClick={onClearAll}
-                  style={styles.changeLocationBtn}
-                  title="Change location"
-                >
-                  🔄
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Selected Location Display - removed */}
 
           {/* Search Form - Enhanced */}
           <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
@@ -492,6 +403,7 @@ const radiusOptions = [
                     key={option.value}
                     type="button"
                     onClick={() => setRadius(option.value)}
+                    className="radius-button"
                     style={{
                       ...styles.radiusButton,
                       ...(radius === option.value ? styles.radiusButtonActive : {})
@@ -513,6 +425,7 @@ const radiusOptions = [
                 <button
                   type="button"
                   onClick={() => setGetAllSectors(true)}
+                  className="strategy-button"
                   style={{
                     ...styles.strategyButton,
                     ...(getAllSectors ? styles.strategyButtonActive : {})
@@ -525,6 +438,7 @@ const radiusOptions = [
                 <button
                   type="button"
                   onClick={() => setGetAllSectors(false)}
+                  className="strategy-button"
                   style={{
                     ...styles.strategyButton,
                     ...(!getAllSectors ? styles.strategyButtonActive : {})
@@ -543,22 +457,6 @@ const radiusOptions = [
                   <span style={styles.labelIcon}>🏪</span>
                   Business Category:
                 </label>
-                <div style={styles.categoryGrid}>
-                  {categories.slice(0, 8).map(cat => (
-                    <button
-                      key={cat.value}
-                      type="button"
-                      onClick={() => setCategory(cat.value)}
-                      style={{
-                        ...styles.categoryButton,
-                        ...(category === cat.value ? styles.categoryButtonActive : {})
-                      }}
-                    >
-                      <span style={styles.categoryEmoji}>{getCategoryEmoji(cat.value)}</span>
-                      <span style={styles.categoryLabel}>{cat.label}</span>
-                    </button>
-                  ))}
-                </div>
                 
                 {/* Full category dropdown for all options */}
                 <select
@@ -580,6 +478,7 @@ const radiusOptions = [
             <button
               type="submit"
               disabled={!selectedLocation || isLoading}
+              className="enhanced-search-button"
               style={{
                 ...styles.enhancedSearchButton,
                 ...((!selectedLocation || isLoading) ? styles.disabledButton : {})
@@ -597,34 +496,6 @@ const radiusOptions = [
             </button>
           </form>
 
-          {/* Enhanced Results Summary */}
-          {resultsCount > 0 && (
-            <div style={styles.enhancedResultsInfo}>
-              <div style={styles.resultsHeader}>
-                <span style={styles.resultsIcon}>✅</span>
-                <div style={styles.resultsText}>
-                  <div style={styles.resultsMain}>
-                    Found <strong>{resultsCount}</strong> business{resultsCount !== 1 ? 'es' : ''}
-                  </div>
-                  <div style={styles.resultsDetail}>
-                    Within {radius}m of selected location
-                  </div>
-                </div>
-              </div>
-              
-              <div style={styles.actionButtons}>
-                <button
-                  onClick={onShowCommerceAnalysis}
-                  style={styles.primaryActionButton}
-                  disabled={!selectedLocation || resultsCount === 0}
-                  title="Analyze this location for commerce potential"
-                >
-                  📊 Start Analysis
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Progress Indicator for Loading */}
           {isLoading && (
             <div style={styles.loadingProgress}>
@@ -637,152 +508,49 @@ const radiusOptions = [
             </div>
           )}
 
-          {/* Clear Button - Enhanced */}
-          {(resultsCount > 0 || selectedLocation) && (
-            <button
-              onClick={onClearAll}
-              style={styles.enhancedClearButton}
-            >
-              <span style={styles.clearIcon}>🗑️</span>
-              Clear Search & Start Over
-            </button>
-          )}
-        </div>
-      )}
+          {/* Results Summary with Auto-Analysis */}
+          {places && places.length > 0 && !isLoading && (
+            <div style={styles.resultsAnalysis}>
+              <div style={styles.analysisHeader}>
+                <h6 style={styles.analysisTitle}>
+                  📊 Quick Analysis ({places.length} places found)
+                </h6>
+              </div>
+              
+              <div style={styles.analysisGrid}>
+                <div style={styles.analysisStat}>
+                  <div style={styles.statValue}>{places.length}</div>
+                  <div style={styles.statLabel}>Total Found</div>
+                </div>
+                
+                <div style={styles.analysisStat}>
+                  <div style={styles.statValue}>
+                    {[...new Set(places.map(p => p.search_type))].length}
+                  </div>
+                  <div style={styles.statLabel}>Categories</div>
+                </div>
+                
+                <div style={styles.analysisStat}>
+                  <div style={styles.statValue}>
+                    {places.filter(p => p.rating >= 4.0).length}
+                  </div>
+                  <div style={styles.statLabel}>High Rated</div>
+                </div>
+              </div>
 
-      {/* Places List - Only show in places mode */}
-      {!showCatchmentMode && places && places.length > 0 && (
-        <div style={styles.placesSection}>
-          <h5 style={styles.sectionTitle}>
-            <span style={styles.placesIcon}>📍</span>
-            Places ({filteredAndSortedPlaces.length})
-          </h5>
-
-          {/* Controls */}
-          <div style={styles.controls}>
-            <input
-              type="text"
-              placeholder="Filter places..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              style={styles.searchInput}
-            />
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={styles.select}
-            >
-              <option value="name">Sort by Name</option>
-              <option value="rating">Sort by Rating</option>
-              <option value="distance">Sort by Distance</option>
-              <option value="type">Sort by Type</option>
-            </select>
-
-            <select
-              value={filterByType}
-              onChange={(e) => setFilterByType(e.target.value)}
-              style={styles.select}
-            >
-              <option value="all">All Types</option>
-              {placeTypes.map(type => (
-                <option key={type} value={type}>
-                  {getCategoryEmoji(type)} {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Loading State */}
-          {isLoading && (
-            <div style={styles.loading}>
-              <div style={styles.spinner}></div>
-              <p>Loading places...</p>
+              {/* Direct Export Actions */}
+              {onShowCommerceAnalysis && (
+                <div style={styles.directActions}>
+                  <button
+                    onClick={() => onShowCommerceAnalysis()}
+                    style={styles.commerceAnalysisBtn}
+                  >
+                    🏪 Full Commerce Analysis
+                  </button>
+                </div>
+              )}
             </div>
           )}
-
-          {/* Places List */}
-          <div style={styles.placesList}>
-            {filteredAndSortedPlaces.map((place, index) => (
-              <div
-                key={place.place_id}
-                style={styles.placeItem}
-                onClick={() => onPlaceClick(place.place_id)}
-              >
-                <div style={styles.placeIconContainer}>
-                  <div 
-                    style={{
-                      ...styles.categoryIcon,
-                      backgroundColor: getCategoryColor(place.search_type)
-                    }}
-                  >
-                    <span style={styles.categoryEmoji}>
-                      {getCategoryEmoji(place.search_type)}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={styles.placeInfo}>
-                  <div style={styles.placeName}>
-                    {place.name || 'Unnamed Place'}
-                  </div>
-                  
-                  <div style={styles.placeDetails}>
-                    <span style={styles.placeType}>
-                      {place.search_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown'}
-                    </span>
-                    {place.rating && (
-                      <span style={styles.rating}>
-                        ⭐ {place.rating.toFixed(1)}
-                        {place.user_ratings_total && (
-                          <span style={styles.ratingsCount}>
-                            ({place.user_ratings_total})
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={styles.placeAddress}>
-                    {place.vicinity || 'No address available'}
-                  </div>
-
-                  <div style={styles.placeExtras}>
-                    {selectedLocation && (
-                      <span style={styles.distance}>
-                        📍 {formatDistance(place)}
-                      </span>
-                    )}
-                    {place.price_level !== undefined && (
-                      <span style={styles.priceLevel}>
-                        {'💰'.repeat(place.price_level + 1)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div style={styles.clickIndicator}>
-                  ➤
-                </div>
-              </div>
-            ))}
-
-            {/* No results message */}
-            {!isLoading && filteredAndSortedPlaces.length === 0 && places.length > 0 && (
-              <div style={styles.noResults}>
-                <p>No places match your filters</p>
-                <button 
-                  style={styles.clearFiltersButton}
-                  onClick={() => {
-                    setSearchFilter('');
-                    setFilterByType('all');
-                  }}
-                >
-                  Clear Filters
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>
@@ -797,13 +565,13 @@ const styles = {
     color: 'white',
     display: 'flex',
     flexDirection: 'column',
-    fontFamily: 'Arial, sans-serif',
-    zIndex: 1500, // Higher z-index to appear above map
-    position: 'fixed', // Fixed positioning to overlay the map
+    overflow: 'hidden',
+    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+    position: 'fixed',
     top: 0,
     left: 0,
-    overflow: 'hidden',
-    boxShadow: '2px 0 10px rgba(0,0,0,0.3)' // Add shadow for better visual separation
+    zIndex: 1500 // Higher z-index to appear above map
   },
   header: {
     padding: '20px',
@@ -853,40 +621,27 @@ const styles = {
     cursor: 'pointer',
     padding: '5px'
   },
-  locationSection: {
-    padding: '15px 20px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.1)'
-  },
-  locationStatus: {
-    fontSize: '12px',
-    color: '#17E88F',
-    padding: '8px 12px',
-    backgroundColor: 'rgba(23, 232, 143, 0.1)',
-    borderRadius: '4px',
-    border: '1px solid rgba(23, 232, 143, 0.3)'
-  },
-  locationWarning: {
-    fontSize: '12px',
-    color: '#f39c12',
-    padding: '8px 12px',
-    backgroundColor: 'rgba(243, 156, 18, 0.1)',
-    borderRadius: '4px',
-    border: '1px solid rgba(243, 156, 18, 0.3)'
-  },
   searchSection: {
-    padding: '20px',
     borderBottom: '1px solid rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.2)'
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: '6px',
+    margin: '6px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    transition: 'all 0.3s ease',
+    transform: 'translateX(0)',
+    backdropFilter: 'blur(5px)'
   },
   sectionTitle: {
     fontSize: '14px',
     fontWeight: '600',
-    marginBottom: '15px',
-    color: 'white',
+    marginBottom: '8px',
+    color: '#ffffff',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '6px',
+    textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+    borderBottom: '2px solid rgba(255,255,255,0.2)',
+    paddingBottom: '4px'
   },
   placesIcon: {
     fontSize: '16px'
@@ -894,12 +649,12 @@ const styles = {
   searchForm: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '15px'
+    gap: '8px'
   },
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '4px'
   },
   label: {
     fontSize: '13px',
@@ -1045,6 +800,39 @@ const styles = {
     backgroundColor: 'rgba(23, 232, 143, 0.1)',
     borderRadius: '4px',
     textAlign: 'center'
+  },
+  enhancedAnalysisSection: {
+    marginTop: '15px',
+    padding: '15px',
+    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+    border: '2px solid rgba(23, 162, 184, 0.3)',
+    borderRadius: '8px',
+    textAlign: 'center'
+  },
+  enhancedAnalysisHeader: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#17a2b8',
+    marginBottom: '8px'
+  },
+  enhancedAnalysisDescription: {
+    fontSize: '12px',
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: '12px',
+    lineHeight: '1.4'
+  },
+  enhancedCommerceBtn: {
+    padding: '10px 16px',
+    background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '600',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 6px rgba(23, 162, 184, 0.3)',
+    width: '100%'
   },
   placesSection: {
     flex: 1,
@@ -1216,147 +1004,191 @@ const styles = {
     boxShadow: '0 2px 6px rgba(0,123,255,0.3)'
   },
 
-  // Enhanced UI styles for improved Places search
-  searchTips: {
-    background: '#e8f4f8',
-    padding: '12px',
+  // Results Analysis Styles
+  resultsAnalysis: {
+    marginTop: '15px',
+    padding: '15px',
+    backgroundColor: 'rgba(23, 232, 143, 0.1)',
     borderRadius: '8px',
-    marginBottom: '20px',
-    border: '1px solid #b3e5fc'
+    border: '1px solid rgba(23, 232, 143, 0.3)',
+    backdropFilter: 'blur(10px)'
   },
-  tipHeader: {
+  analysisHeader: {
+    marginBottom: '12px',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+    paddingBottom: '8px'
+  },
+  analysisTitle: {
+    margin: 0,
     fontSize: '13px',
     fontWeight: '600',
-    color: '#0277bd',
-    marginBottom: '6px'
+    color: '#17E88F',
+    textAlign: 'center'
+  },
+  analysisGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '10px',
+    marginBottom: '15px'
+  },
+  analysisStat: {
+    textAlign: 'center',
+    padding: '8px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: '6px',
+    border: '1px solid rgba(255, 255, 255, 0.1)'
+  },
+  statValue: {
+    fontSize: '16px',
+    fontWeight: 'bold',
+    color: '#17E88F',
+    marginBottom: '2px'
+  },
+  statLabel: {
+    fontSize: '10px',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
+  directActions: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '10px'
+  },
+  commerceAnalysisBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#17E88F',
+    color: '#032842',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '700',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 3px 10px rgba(23, 232, 143, 0.3)'
+  },
+
+  // Enhanced UI styles for improved Places search
+  searchTips: {
+    background: 'rgba(232, 244, 248, 0.1)',
+    padding: '8px',
+    borderRadius: '6px',
+    marginBottom: '10px',
+    border: '1px solid rgba(179, 229, 252, 0.3)',
+    backdropFilter: 'blur(10px)'
+  },
+  tipHeader: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#17E88F',
+    marginBottom: '4px'
   },
   tips: {
-    fontSize: '12px',
-    color: '#01579b',
-    lineHeight: '1.4'
+    fontSize: '10px',
+    color: 'rgba(255, 255, 255, 0.8)',
+    lineHeight: '1.3'
   },
   enhancedLabel: {
-    fontSize: '14px',
+    fontSize: '11px',
     fontWeight: '600',
-    color: '#2c3e50',
+    color: '#ffffff',
     display: 'flex',
     alignItems: 'center',
-    gap: '6px'
+    gap: '4px',
+    marginBottom: '4px'
   },
   labelIcon: {
-    fontSize: '16px'
+    fontSize: '12px'
   },
   labelHint: {
-    fontSize: '12px',
-    color: '#6c757d',
+    fontSize: '9px',
+    color: 'rgba(255, 255, 255, 0.6)',
     fontWeight: '400'
   },
   radiusSelector: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px'
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '6px',
+    marginTop: '8px'
   },
   radiusButton: {
-    padding: '10px 12px',
-    border: '2px solid #dee2e6',
-    borderRadius: '8px',
-    background: 'white',
+    padding: '6px 8px',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    borderRadius: '6px',
+    background: 'rgba(255, 255, 255, 0.1)',
     cursor: 'pointer',
-    fontSize: '13px',
+    fontSize: '11px',
     fontWeight: '500',
     transition: 'all 0.2s ease',
-    textAlign: 'center'
+    textAlign: 'center',
+    color: 'white',
+    backdropFilter: 'blur(10px)'
   },
   radiusButtonActive: {
-    borderColor: '#007acc',
-    background: '#007acc',
-    color: 'white',
+    borderColor: '#17E88F',
+    background: 'rgba(23, 232, 143, 0.2)',
+    color: '#17E88F',
     transform: 'translateY(-1px)',
-    boxShadow: '0 3px 6px rgba(0, 122, 204, 0.2)'
+    boxShadow: '0 2px 6px rgba(23, 232, 143, 0.3)'
   },
   strategyButtons: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px'
+    gap: '6px'
   },
   strategyButton: {
-    padding: '15px',
-    border: '2px solid #dee2e6',
-    borderRadius: '10px',
-    background: 'white',
+    padding: '10px 12px',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    borderRadius: '8px',
+    background: 'rgba(255, 255, 255, 0.05)',
     cursor: 'pointer',
     textAlign: 'left',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    color: 'white',
+    backdropFilter: 'blur(10px)'
   },
   strategyButtonActive: {
-    borderColor: '#007acc',
-    background: '#f0f8ff',
+    borderColor: '#17E88F',
+    background: 'rgba(23, 232, 143, 0.15)',
     transform: 'translateY(-1px)',
-    boxShadow: '0 3px 8px rgba(0, 122, 204, 0.15)'
+    boxShadow: '0 3px 8px rgba(23, 232, 143, 0.2)'
   },
   strategyTitle: {
-    fontSize: '14px',
+    fontSize: '12px',
     fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: '4px'
+    color: '#ffffff',
+    marginBottom: '3px'
   },
   strategyDesc: {
-    fontSize: '12px',
-    color: '#6c757d',
-    lineHeight: '1.3'
-  },
-  categoryGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px',
-    marginBottom: '10px'
-  },
-  categoryButton: {
-    padding: '10px 8px',
-    border: '2px solid #dee2e6',
-    borderRadius: '8px',
-    background: 'white',
-    cursor: 'pointer',
-    fontSize: '12px',
-    textAlign: 'center',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '4px'
-  },
-  categoryButtonActive: {
-    borderColor: '#28a745',
-    background: '#f8fff8',
-    transform: 'translateY(-1px)'
-  },
-  categoryEmoji: {
-    fontSize: '16px'
-  },
-  categoryLabel: {
-    fontSize: '11px',
-    fontWeight: '500'
+    fontSize: '10px',
+    color: 'rgba(255, 255, 255, 0.7)',
+    lineHeight: '1.2'
   },
   categoryDropdown: {
-    padding: '10px 12px',
-    borderRadius: '8px',
-    border: '2px solid #dee2e6',
-    fontSize: '14px',
+    padding: '8px 12px',
+    borderRadius: '6px',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    fontSize: '12px',
     outline: 'none',
-    background: 'white'
+    background: '#2563eb',
+    color: 'white',
+    backdropFilter: 'blur(10px)',
+    marginTop: '4px',
+    fontWeight: '500',
+    cursor: 'pointer'
   },
   enhancedSearchButton: {
-    padding: '16px 20px',
-    background: 'linear-gradient(135deg, #007acc 0%, #0056b3 100%)',
+    padding: '12px 16px',
+    background: 'linear-gradient(135deg, #17E88F 0%, #0ea370 100%)',
     color: 'white',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '16px',
-    fontWeight: '700',
+    fontSize: '13px',
+    fontWeight: '600',
     transition: 'all 0.3s ease',
-    marginTop: '15px',
-    boxShadow: '0 4px 12px rgba(0, 122, 204, 0.3)',
+    marginTop: '12px',
+    boxShadow: '0 3px 10px rgba(23, 232, 143, 0.3)',
     position: 'relative',
     overflow: 'hidden'
   },
@@ -1391,70 +1223,71 @@ const styles = {
     fontWeight: '500'
   },
   enhancedResultsInfo: {
-    marginTop: '20px',
-    padding: '16px',
-    background: 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
-    borderRadius: '10px',
-    border: '2px solid #28a745',
-    boxShadow: '0 3px 10px rgba(40, 167, 69, 0.2)'
+    marginTop: '12px',
+    padding: '12px',
+    background: 'rgba(23, 232, 143, 0.1)',
+    borderRadius: '8px',
+    border: '1px solid rgba(23, 232, 143, 0.3)',
+    boxShadow: '0 2px 8px rgba(23, 232, 143, 0.15)',
+    backdropFilter: 'blur(10px)'
   },
   resultsHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    marginBottom: '12px'
+    gap: '10px',
+    marginBottom: '8px'
   },
   resultsIcon: {
-    fontSize: '20px'
+    fontSize: '18px'
   },
   resultsText: {
     flex: 1
   },
   resultsMain: {
-    fontSize: '16px',
+    fontSize: '14px',
     fontWeight: '600',
-    color: '#155724',
+    color: '#ffffff',
     marginBottom: '2px'
   },
   resultsDetail: {
-    fontSize: '12px',
-    color: '#6c757d'
+    fontSize: '11px',
+    color: 'rgba(255, 255, 255, 0.8)'
   },
   actionButtons: {
     display: 'flex',
-    gap: '8px'
+    gap: '6px'
   },
   primaryActionButton: {
-    padding: '12px 20px',
-    background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+    padding: '8px 14px',
+    background: 'linear-gradient(135deg, #17E88F 0%, #0ea370 100%)',
     color: 'white',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '12px',
     fontWeight: '600',
     transition: 'all 0.2s ease',
-    boxShadow: '0 3px 8px rgba(40, 167, 69, 0.3)'
+    boxShadow: '0 2px 6px rgba(23, 232, 143, 0.3)'
   },
   enhancedClearButton: {
-    marginTop: '15px',
-    padding: '12px 20px',
-    background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
+    marginTop: '10px',
+    padding: '8px 14px',
+    background: 'rgba(220, 53, 69, 0.2)',
+    color: '#ffffff',
+    border: '1px solid rgba(220, 53, 69, 0.4)',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600',
+    fontSize: '12px',
+    fontWeight: '500',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     justifyContent: 'center',
     transition: 'all 0.2s ease',
-    boxShadow: '0 3px 8px rgba(220, 53, 69, 0.3)'
+    backdropFilter: 'blur(10px)'
   },
   clearIcon: {
-    fontSize: '16px'
+    fontSize: '14px'
   },
   disabledButton: {
     background: '#6c757d !important',
@@ -1516,51 +1349,10 @@ const styles = {
     fontSize: '12px',
     color: '#155724',
     fontWeight: '500'
-  },
-
-  // Selected location info styles
-  selectedLocationInfo: {
-    background: 'linear-gradient(135deg, #cceeff 0%, #e6f3ff 100%)',
-    padding: '15px',
-    borderRadius: '10px',
-    margin: '15px 0',
-    border: '2px solid #007acc',
-    boxShadow: '0 3px 10px rgba(0, 122, 204, 0.15)'
-  },
-  locationHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  locationIcon: {
-    fontSize: '18px'
-  },
-  locationDetails: {
-    flex: 1
-  },
-  locationTitle: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#0056b3',
-    marginBottom: '2px'
-  },
-  locationCoords: {
-    fontSize: '11px',
-    color: '#6c757d',
-    fontFamily: 'monospace'
-  },
-  changeLocationBtn: {
-    padding: '6px 10px',
-    background: 'transparent',
-    border: '1px solid #007acc',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '12px',
-    transition: 'all 0.2s ease'
   }
 };
 
-// CSS for spinner and progress animations
+// CSS for enhanced animations and slide effects
 const animationKeyframes = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
@@ -1573,19 +1365,54 @@ const animationKeyframes = `
     100% { transform: translateX(100%); }
   }
   
+  @keyframes slideInLeft {
+    0% { transform: translateX(-100%); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+  
+  @keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  
+  .search-section {
+    animation: fadeIn 0.5s ease-out;
+  }
+  
+  .radius-button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(23, 232, 143, 0.4) !important;
+  }
+  
+  .strategy-button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(23, 232, 143, 0.3) !important;
+  }
+  
+  .category-button:hover {
+    transform: translateY(-2px) scale(1.05) !important;
+    box-shadow: 0 3px 8px rgba(23, 232, 143, 0.3) !important;
+  }
+  
   .enhanced-search-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 122, 204, 0.4) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(23, 232, 143, 0.5) !important;
   }
   
   .primary-action-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4) !important;
+    transform: translateY(-1px) scale(1.02) !important;
+    box-shadow: 0 4px 12px rgba(23, 232, 143, 0.4) !important;
   }
   
   .enhanced-clear-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4) !important;
+    transform: translateY(-1px) !important;
+    background: rgba(220, 53, 69, 0.3) !important;
+    border-color: rgba(220, 53, 69, 0.6) !important;
+  }
+  
+  .search-section:hover {
+    transform: translateX(2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
   }
 `;
 

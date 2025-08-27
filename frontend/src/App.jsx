@@ -18,7 +18,7 @@ function App() {
   const [searchResultsData, setSearchResultsData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
-  const [leftSidebarVisible, setLeftSidebarVisible] = useState(false); // Start with sidebar hidden for cleaner UI
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true); // Show sidebar by default
   
   // Catchment-related state
   const [currentLayer, setCurrentLayer] = useState('catchment');
@@ -91,10 +91,48 @@ function App() {
       setLeftSidebarVisible(true);
       
       if (mapRef.current) {
+        // Clear any existing circle first
+        mapRef.current.clearCircle();
+        // Add new circle with correct radius
         mapRef.current.addCircle(selectedLocation, searchParams.radius);
       }
 
+      // Generate demographic catchment data for the search radius circle
+      console.log('Generating demographic data for search radius:', searchParams.radius);
+      try {
+        const catchmentResponse = await GooglePlacesService.calculateCatchment(
+          selectedLocation,
+          'driving', // Default travel mode for radius search
+          [Math.ceil(searchParams.radius / 1000 * 2)], // Convert radius to approximate drive time
+          true // Show demographics
+        );
+        
+        if (catchmentResponse.catchmentResults && catchmentResponse.catchmentResults.length > 0) {
+          // Create catchment data with the search radius information
+          const radiusCatchmentData = [{
+            ...catchmentResponse.catchmentResults[0],
+            name: `${searchParams.radius}m radius`,
+            searchRadius: searchParams.radius,
+            isRadiusSearch: true,
+            driveTime: Math.ceil(searchParams.radius / 1000 * 2) // Approximate drive time
+          }];
+          
+          setCatchmentData(radiusCatchmentData);
+          console.log('Generated radius catchment data:', radiusCatchmentData);
+        }
+      } catch (catchmentError) {
+        console.error('Error generating catchment data for radius search:', catchmentError);
+        // Continue without catchment data if it fails
+      }
+
       console.log('Search results:', results);
+
+      // Automatically trigger commerce analysis after search
+      if (results.places && results.places.length > 0) {
+        console.log('Auto-triggering commerce analysis...');
+        handleShowCommerceAnalysis();
+      }
+
     } catch (error) {
       console.error('Error searching places:', error);
       alert('Error searching places. Please try again.');
@@ -113,6 +151,7 @@ function App() {
     setIsLoading(true);
     try {
       console.log('Calculating catchment with params:', params);
+      console.log('FRONTEND: Sending catchment request to server...');
       
       const response = await GooglePlacesService.calculateCatchment(
         selectedLocation,
@@ -121,7 +160,8 @@ function App() {
         params.showDemographics
       );
       
-      console.log('Catchment calculation response:', response);
+      console.log('FRONTEND: Catchment calculation response:', response);
+      console.log('FRONTEND: Setting catchmentData to:', response.catchmentResults);
       
       setCatchmentData(response.catchmentResults || []);
       setShowCatchmentResults(true);
@@ -333,15 +373,87 @@ function App() {
 
   // Commerce Analysis Handlers
   const handleShowCommerceAnalysis = () => {
+    console.log('FRONTEND: handleShowCommerceAnalysis called');
+    console.log('FRONTEND: selectedLocation:', selectedLocation);
+    console.log('FRONTEND: searchResultsData:', searchResultsData);
+    console.log('FRONTEND: catchmentData:', catchmentData);
+    
     if (!selectedLocation) {
       alert('Please select a location first');
       return;
     }
-    if (!searchResultsData || searchResultsData.length === 0) {
-      alert('Please search for places first to enable commerce analysis');
-      return;
+    // Removed the alert for places search requirement
+    // The analysis can work with or without places data
+
+        // Determine analysis type based on available data
+    const hasPlacesData = searchResultsData && searchResultsData.length > 0;
+    const hasCatchmentData = catchmentData && catchmentData.length > 0;
+    
+    console.log('FRONTEND: hasPlacesData:', hasPlacesData, 'count:', searchResultsData?.length);
+    console.log('FRONTEND: hasCatchmentData:', hasCatchmentData, 'count:', catchmentData?.length);
+    
+    // Use catchment data if available, otherwise use places data
+    let analysisData = [];
+    let dataSource = 'location_only';
+    
+    if (hasCatchmentData) {
+      // For radius searches, we have both places and demographic catchment data
+      console.log('FRONTEND: Using catchment data for analysis');
+      if (hasPlacesData) {
+        analysisData = searchResultsData;
+        dataSource = 'radius_catchment_intersection'; // New data source type
+      } else {
+        analysisData = [];
+        dataSource = 'catchment_only';
+      }
+    } else if (hasPlacesData) {
+      console.log('FRONTEND: Using places data for analysis');
+      analysisData = searchResultsData;
+      dataSource = 'places_search';
     }
-    setShowCommerceAnalysis(true);
+
+    console.log('FRONTEND: analysisData length:', analysisData.length);
+    console.log('FRONTEND: dataSource:', dataSource);
+
+    const isCompleteMarketScan = analysisData.length > 100 || 
+                                (analysisData.some(place => !place.search_type) || 
+                                 new Set(analysisData.map(p => p.search_type)).size > 10);
+    
+    // Get primary business category from analysis data
+    const businessCategories = analysisData.map(place => place.search_type).filter(Boolean);
+    const primaryCategory = businessCategories.length > 0 ? 
+      businessCategories.reduce((a, b, i, arr) => 
+        arr.filter(c => c === a).length >= arr.filter(c => c === b).length ? a : b
+      ) : 'general_business';
+
+    // Create analysis results object directly
+    const directAnalysisResults = {
+      analysisType: isCompleteMarketScan ? 'comprehensive_commerce' : 'commerce_location',
+      businessCategory: primaryCategory,
+      totalPlaces: analysisData.length,
+      location: selectedLocation,
+      places: analysisData,
+      dataSource: dataSource, // Track where the data came from
+      analysisDate: new Date().toISOString(),
+      catchmentData: hasCatchmentData ? catchmentData : null, // Include catchment data if available
+      summary: {
+        totalBusinesses: analysisData.length,
+        primaryCategory: primaryCategory?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        averageRating: analysisData.filter(p => p.rating).reduce((sum, p) => sum + p.rating, 0) / analysisData.filter(p => p.rating).length || 0,
+        highRatedCount: analysisData.filter(p => p.rating >= 4.0).length,
+        dataSource: dataSource,
+        categoryBreakdown: businessCategories.reduce((acc, cat) => {
+          acc[cat] = (acc[cat] || 0) + 1;
+          return acc;
+        }, {})
+      }
+    };
+
+    // Set the analysis results and go directly to ranking report
+    setAnalysisResults(directAnalysisResults);
+    setShowRankingReport(true);
+    
+    console.log('FRONTEND: Direct commerce analysis created:', directAnalysisResults);
   };
 
   const handleCommerceAnalysisComplete = (results) => {
@@ -366,22 +478,30 @@ function App() {
     try {
       setIsLoading(true);
       
+      // Determine commerce type from analysis results
+      const commerceType = reportData.analysisType === 'comprehensive_commerce' ? 
+        'comprehensive_commerce' : 'retail_commerce';
+      
       if (exportType === 'pdf') {
-        // Generate commerce analysis PDF report
+        // Generate commerce analysis PDF report with correct type
         await GooglePlacesService.generateCommerceReport(
           reportData, 
-          'retail_commerce', // Default commerce type
+          commerceType,
           selectedLocation ? `${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}` : 'Selected Location'
         );
       } else if (exportType === 'excel') {
-        // Export detailed analysis to Excel
-        await GooglePlacesService.exportPlacesToExcel(searchResultsData, {
+        // Export detailed analysis to Excel - use data from report instead of searchResultsData
+        const exportData = reportData.places || searchResultsData || [];
+        await GooglePlacesService.exportPlacesToExcel(exportData, {
           location: selectedLocation,
-          analysisResults: reportData
+          analysisResults: reportData,
+          analysisType: commerceType,
+          dataSource: reportData.dataSource || 'places_search',
+          catchmentData: reportData.catchmentData || null
         });
       }
       
-      console.log(`${exportType.toUpperCase()} export completed successfully`);
+      console.log(`${exportType.toUpperCase()} export completed successfully for ${commerceType}`);
     } catch (error) {
       console.error(`Error exporting ${exportType}:`, error);
       alert(`Error exporting ${exportType}. Please try again.`);
@@ -428,6 +548,19 @@ function App() {
               }
             }}
           />
+          
+          {/* Menu Button - Inside search container for proper alignment */}
+          <button
+            onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
+            style={{
+              ...styles.menuButton,
+              ...(leftSidebarVisible ? styles.menuButtonActive : {})
+            }}
+            className="menu-button"
+            title={leftSidebarVisible ? 'Hide Menu' : 'Show Menu'}
+          >
+            ☰
+          </button>
         </div>
 
         {/* Add CSS for button interactions */}
@@ -460,45 +593,39 @@ function App() {
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(0,123,255,0.4) !important;
           }
+          .export-button:hover {
+            background-color: rgba(255, 255, 255, 0.3) !important;
+            transform: translateY(-1px);
+            border-color: rgba(255, 255, 255, 0.5) !important;
+          }
         `}</style>
 
-        {/* Menu Button - Adjusts position when sidebar is open */}
-        <div style={{
-          ...styles.menuContainer,
-          left: leftSidebarVisible ? '700px' : '320px' // Increased gap from search bar
-        }}>
-          <button
-            onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
-            style={{
-              ...styles.menuButton,
-              ...(leftSidebarVisible ? styles.menuButtonActive : {})
-            }}
-            className="menu-button"
-            title={leftSidebarVisible ? 'Hide Menu' : 'Show Menu'}
-          >
-            ☰
-          </button>
-        </div>
-
-        {/* Search Results Counter - Only in places mode */}
-        {!showCatchmentMode && searchResultsData.length > 0 && (
-          <div style={styles.resultsCounter}>
-            <div style={styles.resultsInfo}>
-              <span style={styles.resultsText}>
-                📍 {searchResultsData.length} place{searchResultsData.length !== 1 ? 's' : ''} found
-              </span>
+      {/* Search Results Counter - Only in places mode with enhanced analysis */}
+      {!showCatchmentMode && searchResultsData.length > 0 && (
+        <div style={styles.resultsCounter}>
+          <div style={styles.resultsInfo}>
+            <span style={styles.resultsText}>
+              📍 {searchResultsData.length} place{searchResultsData.length !== 1 ? 's' : ''} found
+            </span>
+            <div style={styles.quickExportActions}>
               <button
-                onClick={handleShowCommerceAnalysis}
-                style={styles.analysisButton}
-                title="Analyze this location for commerce potential"
+                onClick={() => handleExportCommerceReport('pdf', analysisResults || { places: searchResultsData, location: selectedLocation })}
+                style={styles.exportButton}
+                title="Export PDF Report"
               >
-                📊 Analyze Location
+                📄 PDF
+              </button>
+              <button
+                onClick={() => handleExportCommerceReport('excel', analysisResults || { places: searchResultsData, location: selectedLocation })}
+                style={styles.exportButton}
+                title="Export Excel Analysis"
+              >
+                📊 Excel
               </button>
             </div>
           </div>
-        )}
-
-        {/* Catchment Results Counter - Only in catchment mode */}
+        </div>
+      )}        {/* Catchment Results Counter - Only in catchment mode */}
         {showCatchmentMode && catchmentData.length > 0 && (
           <div style={styles.resultsCounter}>
             <span style={styles.resultsText}>
@@ -508,26 +635,24 @@ function App() {
         )}
       </div>
 
-      {/* Left Sidebar - Overlays the map */}
-      {leftSidebarVisible && (
-        <CatchmentSidebar
-          visible={leftSidebarVisible}
-          places={showCatchmentMode ? [] : searchResultsData}
-          onPlaceClick={handlePlaceClick}
-          onClose={() => setLeftSidebarVisible(false)}
-          selectedLocation={selectedLocation}
-          isLoading={isLoading}
-          currentLayer={currentLayer}
-          onSearch={showCatchmentMode ? null : handleSearch}
-          onCatchmentCalculate={showCatchmentMode ? handleCatchmentCalculation : null}
-          resultsCount={searchResults.length}
-          showCatchmentMode={showCatchmentMode}
-          catchmentData={catchmentData}
-          onClearAll={clearSearch}
-          onToggleMode={toggleCatchmentMode}
-          onShowCommerceAnalysis={!showCatchmentMode ? handleShowCommerceAnalysis : null}
-        />
-      )}
+      {/* Left Sidebar - Always visible */}
+      <CatchmentSidebar
+        visible={leftSidebarVisible}
+        places={showCatchmentMode ? [] : searchResultsData}
+        onPlaceClick={handlePlaceClick}
+        onClose={() => setLeftSidebarVisible(false)}
+        selectedLocation={selectedLocation}
+        isLoading={isLoading}
+        currentLayer={currentLayer}
+        onSearch={showCatchmentMode ? null : handleSearch}
+        onCatchmentCalculate={showCatchmentMode ? handleCatchmentCalculation : null}
+        resultsCount={searchResults.length}
+        showCatchmentMode={showCatchmentMode}
+        catchmentData={catchmentData}
+        onClearAll={clearSearch}
+        onToggleMode={toggleCatchmentMode}
+        onShowCommerceAnalysis={!showCatchmentMode ? handleShowCommerceAnalysis : null}
+      />
 
       {/* Right Sidebar for Place Details - Only in places mode */}
       {!showCatchmentMode && isPlaceDetailsSidebarOpen && (
@@ -656,13 +781,6 @@ const styles = {
     fontWeight: '400',
     color: '#333'
   },
-  menuContainer: {
-    position: 'absolute',
-    top: '20px',
-    // left position will be set dynamically
-    zIndex: 1600, // Higher than sidebar z-index (1500)
-    transition: 'left 0.3s ease' // Smooth transition when moving
-  },
   menuButton: {
     width: '40px',    // Reduced from 48px
     height: '40px',   // Reduced from 48px
@@ -694,12 +812,30 @@ const styles = {
   resultsInfo: {
     display: 'flex',
     alignItems: 'center',
-    gap: '15px',
+    justifyContent: 'space-between',
     backgroundColor: 'rgba(40, 167, 69, 0.9)',
     padding: '12px 20px',
     borderRadius: '25px',
     backdropFilter: 'blur(10px)',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+    gap: '15px'
+  },
+  quickExportActions: {
+    display: 'flex',
+    gap: '8px'
+  },
+  exportButton: {
+    padding: '6px 12px',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    color: 'white',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '600',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap',
+    backdropFilter: 'blur(5px)'
   },
   resultsText: {
     color: 'white',
