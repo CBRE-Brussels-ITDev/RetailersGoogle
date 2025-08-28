@@ -15,6 +15,9 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Move API key to environment variable for security
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA1r8V5FSaYFvmS8FwnGxA6DwXhnHUvHUc";
 
+console.log('🔑 API Key loaded:', API_KEY ? 'Yes ✅' : 'No ❌');
+console.log('🔑 API Key first 10 chars:', API_KEY ? API_KEY.substring(0, 10) + '...' : 'Not found');
+
 // Get place details by ID with comprehensive information
 app.get('/google-maps/place/:id', async (req, res) => {
     const { id } = req.params;
@@ -1822,7 +1825,7 @@ app.post('/api/reverse-geocode', async (req, res) => {
         
         // Use Google Maps Geocoding API
         const response = await axios.get(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${API_KEY}`
         );
 
         if (response.data.status === 'OK' && response.data.results.length > 0) {
@@ -1905,7 +1908,7 @@ app.post('/api/autocomplete', async (req, res) => {
         
         // Use Google Places Autocomplete API
         const response = await axios.get(
-            `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${GOOGLE_MAPS_API_KEY}`
+            `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${API_KEY}`
         );
 
         if (response.data.status === 'OK') {
@@ -1943,7 +1946,7 @@ app.post('/api/place-details', async (req, res) => {
         
         // Use Google Places Details API
         const response = await axios.get(
-            `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&fields=geometry,formatted_address,address_components&key=${GOOGLE_MAPS_API_KEY}`
+            `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&fields=geometry,formatted_address,address_components&key=${API_KEY}`
         );
 
         if (response.data.status === 'OK') {
