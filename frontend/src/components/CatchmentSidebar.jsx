@@ -822,17 +822,19 @@ const styles = {
     lineHeight: '1.4'
   },
   enhancedCommerceBtn: {
-    padding: '10px 16px',
-    background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
+    padding: '12px 16px',
+    background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)',
+    color: '#ffffff',
+    border: '2px solid #ff8c42',
+    borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600',
+    fontSize: '14px',
+    fontWeight: '700',
     transition: 'all 0.3s ease',
-    boxShadow: '0 2px 6px rgba(23, 162, 184, 0.3)',
-    width: '100%'
+    boxShadow: '0 4px 12px rgba(255, 107, 53, 0.4)',
+    width: '100%',
+    textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+    letterSpacing: '0.5px'
   },
   placesSection: {
     flex: 1,
