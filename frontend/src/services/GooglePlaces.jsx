@@ -224,6 +224,72 @@ const GooglePlacesService = {
             console.error('Error in searchPlaces:', error);
             throw error;
         }
+    },
+
+    // Reverse geocoding to get address from coordinates
+    async reverseGeocode(lat, lng) {
+        console.log('Reverse geocoding coordinates:', { lat, lng });
+        try {
+            const response = await axios.post(`${BASE_URL}/api/reverse-geocode`, {
+                lat,
+                lng
+            });
+            
+            if (response.data && response.data.address) {
+                console.log('Reverse geocoding result:', response.data.address);
+                return response.data.address;
+            } else {
+                console.warn('No address found for coordinates');
+                return null;
+            }
+        } catch (error) {
+            console.error('Error in reverse geocoding:', error);
+            return null;
+        }
+    },
+
+    // Address autocomplete suggestions
+    async getAddressSuggestions(input) {
+        if (!input || input.trim().length < 3) {
+            return [];
+        }
+        
+        console.log('Getting address suggestions for:', input);
+        try {
+            const response = await axios.post(`${BASE_URL}/api/autocomplete`, {
+                input
+            });
+            
+            if (response.data && response.data.predictions) {
+                console.log('Address suggestions:', response.data.predictions);
+                return response.data.predictions;
+            } else {
+                return [];
+            }
+        } catch (error) {
+            console.error('Error getting address suggestions:', error);
+            return [];
+        }
+    },
+
+    // Get place details from place_id
+    async getPlaceDetails(placeId) {
+        console.log('Getting place details for:', placeId);
+        try {
+            const response = await axios.post(`${BASE_URL}/api/place-details`, {
+                place_id: placeId
+            });
+            
+            if (response.data) {
+                console.log('Place details:', response.data);
+                return response.data;
+            } else {
+                return null;
+            }
+        } catch (error) {
+            console.error('Error getting place details:', error);
+            return null;
+        }
     }
 };
 

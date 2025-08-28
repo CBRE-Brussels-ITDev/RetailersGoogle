@@ -1808,6 +1808,166 @@ app.post('/get-all-places-text-search', async (req, res) => {
     }
 });
 
+// Reverse geocoding endpoint to get address from coordinates
+app.post('/api/reverse-geocode', async (req, res) => {
+    try {
+        const { lat, lng } = req.body;
+        
+        if (!lat || !lng) {
+            return res.status(400).json({ error: 'Latitude and longitude are required' });
+        }
+
+        console.log(`Reverse geocoding coordinates: ${lat}, ${lng}`);
+        
+        // Use Google Maps Geocoding API
+        const response = await axios.get(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`
+        );
+
+        if (response.data.status === 'OK' && response.data.results.length > 0) {
+            const result = response.data.results[0];
+            const components = result.address_components;
+            
+            // Extract street number, street name, and city
+            let streetNumber = '';
+            let streetName = '';
+            let city = '';
+            let postalCode = '';
+            
+            components.forEach(component => {
+                const types = component.types;
+                if (types.includes('street_number')) {
+                    streetNumber = component.long_name;
+                } else if (types.includes('route')) {
+                    streetName = component.long_name;
+                } else if (types.includes('locality') || types.includes('administrative_area_level_2')) {
+                    city = component.long_name;
+                } else if (types.includes('postal_code')) {
+                    postalCode = component.long_name;
+                }
+            });
+            
+            // Format address as "Street Number, City"
+            let formattedAddress = '';
+            if (streetName) {
+                formattedAddress = streetName;
+                if (streetNumber) {
+                    formattedAddress = `${streetName} ${streetNumber}`;
+                }
+                if (city) {
+                    formattedAddress += `, ${city}`;
+                }
+            } else if (city) {
+                formattedAddress = city;
+            } else {
+                formattedAddress = result.formatted_address;
+            }
+            
+            console.log(`Formatted address: ${formattedAddress}`);
+            
+            res.json({
+                address: formattedAddress,
+                fullAddress: result.formatted_address,
+                components: {
+                    streetNumber,
+                    streetName,
+                    city,
+                    postalCode
+                },
+                place_id: result.place_id,
+                geometry: result.geometry
+            });
+        } else {
+            console.log(`No address found for coordinates: ${lat}, ${lng}`);
+            res.status(404).json({ error: 'No address found for these coordinates' });
+        }
+        
+    } catch (error) {
+        console.error('Error in reverse geocoding:', error);
+        res.status(500).json({ 
+            error: 'Failed to reverse geocode coordinates',
+            details: error.message 
+        });
+    }
+});
+
+// Address autocomplete endpoint
+app.post('/api/autocomplete', async (req, res) => {
+    try {
+        const { input } = req.body;
+        
+        if (!input || input.trim().length < 3) {
+            return res.json({ predictions: [] });
+        }
+
+        console.log(`Autocomplete search for: ${input}`);
+        
+        // Use Google Places Autocomplete API
+        const response = await axios.get(
+            `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${GOOGLE_MAPS_API_KEY}`
+        );
+
+        if (response.data.status === 'OK') {
+            const predictions = response.data.predictions.map(prediction => ({
+                place_id: prediction.place_id,
+                description: prediction.description,
+                main_text: prediction.structured_formatting.main_text,
+                secondary_text: prediction.structured_formatting.secondary_text
+            }));
+            
+            res.json({ predictions });
+        } else {
+            res.json({ predictions: [] });
+        }
+        
+    } catch (error) {
+        console.error('Error in autocomplete:', error);
+        res.status(500).json({ 
+            error: 'Failed to get autocomplete suggestions',
+            details: error.message 
+        });
+    }
+});
+
+// Get place details from place_id (for autocomplete selection)
+app.post('/api/place-details', async (req, res) => {
+    try {
+        const { place_id } = req.body;
+        
+        if (!place_id) {
+            return res.status(400).json({ error: 'Place ID is required' });
+        }
+
+        console.log(`Getting place details for: ${place_id}`);
+        
+        // Use Google Places Details API
+        const response = await axios.get(
+            `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&fields=geometry,formatted_address,address_components&key=${GOOGLE_MAPS_API_KEY}`
+        );
+
+        if (response.data.status === 'OK') {
+            const result = response.data.result;
+            const location = result.geometry.location;
+            
+            res.json({
+                lat: location.lat,
+                lng: location.lng,
+                formatted_address: result.formatted_address,
+                address_components: result.address_components
+            });
+        } else {
+            res.status(404).json({ error: 'Place not found' });
+        }
+        
+    } catch (error) {
+        console.error('Error getting place details:', error);
+        res.status(500).json({ 
+            error: 'Failed to get place details',
+            details: error.message 
+        });
+    }
+});
+
 // Health check endpoint
 app.get('/hello', (req, res) => {
     res.json({ 

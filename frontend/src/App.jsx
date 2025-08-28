@@ -18,6 +18,9 @@ function App() {
   const [searchResultsData, setSearchResultsData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedAddress, setSelectedAddress] = useState(''); // New state for address
+  const [addressSuggestions, setAddressSuggestions] = useState([]); // Autocomplete suggestions
+  const [showSuggestions, setShowSuggestions] = useState(false); // Show/hide suggestions
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(true); // Show sidebar by default
   
   // Catchment-related state
@@ -42,9 +45,25 @@ function App() {
     }
   };
 
-  const handleMapClick = (lat, lng) => {
+  const handleMapClick = async (lat, lng) => {
     setSelectedLocation({ lat, lng });
     console.log('Map clicked at:', { lat, lng });
+    
+    // Get address from coordinates using reverse geocoding
+    try {
+      const address = await GooglePlacesService.reverseGeocode(lat, lng);
+      if (address) {
+        setSelectedAddress(address);
+        console.log('Address found:', address);
+      } else {
+        // Fallback to coordinates if no address found
+        setSelectedAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+      }
+    } catch (error) {
+      console.error('Error getting address:', error);
+      // Fallback to coordinates if reverse geocoding fails
+      setSelectedAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    }
     
     // Only clear search results in places mode
     if (!showCatchmentMode) {
@@ -200,6 +219,7 @@ function App() {
         const lng = parseFloat(result.lon);
         
         setSelectedLocation({ lat, lng });
+        setSelectedAddress(result.display_name); // Set the address from search result
         console.log('Found location:', { lat, lng, name: result.display_name });
 
         // Center map on the found location
@@ -244,12 +264,69 @@ function App() {
     setSearchResults([]);
     setSearchResultsData([]);
     setSelectedLocation(null);
+    setSelectedAddress(''); // Clear the address as well
     setCatchmentData([]);
     setShowCatchmentResults(false);
     if (mapRef.current) {
       mapRef.current.clearCircle();
       mapRef.current.clearCatchments();
     }
+  };
+
+  // Handle address input changes and get suggestions
+  const handleAddressChange = async (value) => {
+    setSelectedAddress(value);
+    
+    if (value.trim().length >= 3) {
+      try {
+        const suggestions = await GooglePlacesService.getAddressSuggestions(value);
+        setAddressSuggestions(suggestions);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error('Error getting address suggestions:', error);
+        setAddressSuggestions([]);
+      }
+    } else {
+      setAddressSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  // Handle suggestion selection
+  const handleSuggestionSelect = async (suggestion) => {
+    try {
+      const placeDetails = await GooglePlacesService.getPlaceDetails(suggestion.place_id);
+      if (placeDetails) {
+        setSelectedLocation({ lat: placeDetails.lat, lng: placeDetails.lng });
+        setSelectedAddress(suggestion.description);
+        setShowSuggestions(false);
+        setAddressSuggestions([]);
+        
+        // Center map on selected location
+        if (mapRef.current && mapRef.current.getMapView) {
+          const mapView = mapRef.current.getMapView();
+          if (mapView) {
+            mapView.goTo({
+              center: [placeDetails.lng, placeDetails.lat],
+              zoom: 14
+            });
+          }
+        }
+        
+        console.log('Selected address:', suggestion.description);
+        console.log('Coordinates:', { lat: placeDetails.lat, lng: placeDetails.lng });
+      }
+    } catch (error) {
+      console.error('Error selecting suggestion:', error);
+    }
+  };
+
+  // Hide suggestions when clicking outside
+  const handleInputBlur = () => {
+    // Delay hiding to allow click on suggestion
+    setTimeout(() => {
+      setShowSuggestions(false);
+    }, 200);
   };
 
   // Generate PDF report
@@ -532,22 +609,49 @@ function App() {
           style={{ width: '100%', height: '100%' }}
         />
 
-        {/* Search Bar - Adjusts position when sidebar is open */}
+        {/* Search Bar with Autocomplete - Adjusts position when sidebar is open */}
         <div style={{
           ...styles.searchContainer,
           left: leftSidebarVisible ? '400px' : '20px' // Move right when sidebar is open
         }}>
-          <input
-            type="text"
-            placeholder="Search for a location..."
-            style={styles.searchInput}
-            className="search-input"
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                handleLocationSearch(e.target.value);
-              }
-            }}
-          />
+          <div style={styles.searchInputContainer}>
+            <input
+              type="text"
+              placeholder="Type a street address..."
+              value={selectedAddress}
+              onChange={(e) => handleAddressChange(e.target.value)}
+              onFocus={() => addressSuggestions.length > 0 && setShowSuggestions(true)}
+              onBlur={handleInputBlur}
+              style={styles.searchInput}
+              className="search-input"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  if (addressSuggestions.length > 0) {
+                    handleSuggestionSelect(addressSuggestions[0]);
+                  } else {
+                    handleLocationSearch(e.target.value);
+                  }
+                }
+              }}
+            />
+            
+            {/* Autocomplete Suggestions Dropdown */}
+            {showSuggestions && addressSuggestions.length > 0 && (
+              <div style={styles.suggestionsDropdown}>
+                {addressSuggestions.map((suggestion, index) => (
+                  <div
+                    key={suggestion.place_id}
+                    style={styles.suggestionItem}
+                    onMouseDown={(e) => e.preventDefault()} // Prevent blur before click
+                    onClick={() => handleSuggestionSelect(suggestion)}
+                  >
+                    <div style={styles.suggestionMain}>{suggestion.main_text}</div>
+                    <div style={styles.suggestionSecondary}>{suggestion.secondary_text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           
           {/* Menu Button - Inside search container for proper alignment */}
           <button
@@ -780,6 +884,42 @@ const styles = {
     MozAppearance: 'textfield',
     fontWeight: '400',
     color: '#333'
+  },
+  searchInputContainer: {
+    position: 'relative',
+    display: 'inline-block'
+  },
+  suggestionsDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderRadius: '10px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+    zIndex: 1001,
+    maxHeight: '300px',
+    overflowY: 'auto',
+    marginTop: '5px'
+  },
+  suggestionItem: {
+    padding: '12px 16px',
+    cursor: 'pointer',
+    borderBottom: '1px solid #f0f0f0',
+    transition: 'background-color 0.2s ease',
+    ':hover': {
+      backgroundColor: '#f8f9fa'
+    }
+  },
+  suggestionMain: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#333',
+    marginBottom: '2px'
+  },
+  suggestionSecondary: {
+    fontSize: '12px',
+    color: '#666'
   },
   menuButton: {
     width: '40px',    // Reduced from 48px
