@@ -89,15 +89,27 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
             
             // Check if we clicked on a marker
             mapView.current.hitTest(event).then((response) => {
+              console.log('Hit test results:', response.results.length);
+              
               if (response.results.length > 0) {
                 const graphic = response.results[0].graphic;
+                console.log('Graphic clicked:', graphic.attributes);
+                
                 if (graphic.attributes && graphic.attributes.place_id && onPlaceClick) {
+                  console.log('Place clicked with ID:', graphic.attributes.place_id);
                   onPlaceClick(graphic.attributes.place_id);
-                  return;
+                  return; // Exit early, don't call map click
                 }
               }
               
               // If no marker was clicked, treat as map click
+              console.log('No marker clicked, calling map click handler');
+              if (onMapClick) {
+                onMapClick(latitude, longitude);
+              }
+            }).catch((error) => {
+              console.error('Hit test error:', error);
+              // Fallback to map click if hit test fails
               if (onMapClick) {
                 onMapClick(latitude, longitude);
               }
@@ -186,7 +198,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       }
     },
 
-    async addCatchmentPolygons(catchmentData) {
+    async addCatchmentPolygons(catchmentData, colors = null) {
       if (!mapView.current || !graphicsLayer.current) {
         console.error('Map view or graphics layer not available');
         return;
@@ -199,6 +211,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
       try {
         console.log('Adding catchment polygons, count:', catchmentData.length);
+        console.log('Using custom colors:', colors);
         console.log('Graphics layer available:', !!graphicsLayer.current);
         console.log('Map view available:', !!mapView.current);
         console.log('Map view spatial reference:', mapView.current?.spatialReference?.wkid);
@@ -214,15 +227,36 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         // Clear existing catchment graphics
         clearCatchmentPolygons();
 
-        // Colors for different drive times matching JSReport template
-        // 1st catchment: rgb(114, 151, 153)
-        // 2nd catchment: rgb(139, 169, 171) 
-        // 3rd catchment: rgb(176, 195, 196)
-        const colors = [
+        // Use custom colors from color picker or fallback to default colors
+        const defaultColors = [
           { fill: [114, 151, 153, 0.25], stroke: [114, 151, 153, 0.8] },  // First catchment
           { fill: [139, 169, 171, 0.25], stroke: [139, 169, 171, 0.8] },  // Second catchment
           { fill: [176, 195, 196, 0.25], stroke: [176, 195, 196, 0.8] }   // Third catchment
         ];
+
+        // Convert rgba colors to ArcGIS format if provided
+        let finalColors = defaultColors;
+        if (colors && Array.isArray(colors)) {
+          finalColors = colors.map((color, index) => {
+            if (typeof color === 'string' && color.includes('rgba')) {
+              // Extract RGBA values from rgba string
+              const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),\s*([^)]+)\)/);
+              if (match) {
+                const r = parseInt(match[1]);
+                const g = parseInt(match[2]);
+                const b = parseInt(match[3]);
+                const a = parseFloat(match[4]);
+                return { 
+                  fill: [r, g, b, a * 0.3], // Fill with reduced opacity
+                  stroke: [r, g, b, Math.min(a * 1.5, 1.0)] // Stroke with higher opacity
+                };
+              }
+            }
+            return defaultColors[index] || defaultColors[0];
+          });
+        }
+
+        console.log('Final colors for polygons:', finalColors);
 
         let addedCount = 0;
 
@@ -271,7 +305,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
               console.log('Polygon extent:', polygon.extent);
 
-              const color = colors[index % colors.length];
+              const color = finalColors[index % finalColors.length];
               const fillSymbol = new SimpleFillSymbol.default({
                 color: color.fill,
                 outline: new SimpleLineSymbol.default({
@@ -550,6 +584,10 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   const addSearchResultMarkers = async (placesData) => {
     if (!mapView.current || !graphicsLayer.current || !placesData?.length) return;
 
+    console.log('=== ADDING SEARCH RESULT MARKERS ===');
+    console.log('Number of places to add:', placesData.length);
+    console.log('Places data:', placesData);
+
     try {
       const [Graphic, Point, SimpleMarkerSymbol, TextSymbol] = await Promise.all([
         import('@arcgis/core/Graphic'),
@@ -560,6 +598,12 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
 
       for (let i = 0; i < placesData.length; i++) {
         const place = placesData[i];
+        console.log(`Adding marker for place ${i}:`, {
+          name: place.name,
+          place_id: place.place_id,
+          coordinates: place.coordinates
+        });
+        
         const position = place.coordinates;
         
         // Get category color and emoji
@@ -612,8 +656,17 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         // Create text graphic for emoji overlay
         const textGraphic = new Graphic.default({
           geometry: point,
-          symbol: textSymbol
+          symbol: textSymbol,
+          attributes: {
+            place_id: place.place_id,
+            name: place.name,
+            type: place.search_type,
+            isTextOverlay: true
+          }
         });
+
+        console.log(`Marker attributes for ${place.name}:`, markerGraphic.attributes);
+        console.log(`Text attributes for ${place.name}:`, textGraphic.attributes);
 
         graphicsLayer.current.add(markerGraphic);
         graphicsLayer.current.add(textGraphic);
@@ -650,7 +703,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     };
 
     updateMarkers();
-  }, [selectedLocation, searchResultsData, onPlaceClick]);
+  }, [selectedLocation, searchResultsData]);
 
   // Clean up on unmount
   useEffect(() => {

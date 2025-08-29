@@ -6,9 +6,51 @@ import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 const PlaceDetailsSidebar = ({ isOpen, onClose, data }) => {
     const [activeTab, setActiveTab] = useState('overview');
 
-    if (!isOpen || !data?.data?.result) return null;
+    if (!isOpen || !data) return null;
 
-    const place = data.data.result;
+    // Handle different data structures - API might return nested or direct data
+    const place = data?.result || data?.data?.result || data;
+
+    console.log('🔍 === PLACE DETAILS SIDEBAR RENDER ===');
+    console.log('📥 Raw data received:', data);
+    console.log('🏗️ Processed place object:', place);
+    console.log('🗂️ Available place fields:', place ? Object.keys(place) : 'No place data');
+    console.log('💼 Place name:', place?.name || 'No name');
+    console.log('📍 Place address:', place?.formatted_address || place?.vicinity || 'No address');
+    console.log('⭐ Place rating:', place?.rating || 'No rating');
+    console.log('📞 Place phone:', place?.formatted_phone_number || 'No phone');
+    console.log('🕐 Opening hours:', place?.opening_hours || 'No hours');
+    console.log('💬 Reviews:', place?.reviews?.length || 0, 'reviews');
+    console.log('📸 Photos:', place?.photos?.length || 0, 'photos');
+    console.log('🎯 Photo URLs:', place?.photo_urls?.length || 0, 'photo URLs');
+    console.log('📋 Formatted reviews:', place?.formatted_reviews?.length || 0, 'formatted reviews');
+    console.log('🔗 All place data structure:', JSON.stringify(place, null, 2));
+
+    if (!place) {
+        console.log('No place data available, not rendering sidebar');
+        return null;
+    }
+
+    console.log('PlaceDetailsSidebar rendering with place:', place.name || place.formatted_address || 'Unknown place');
+
+    // Extract place information - handle both search results format and API response format
+    const placeName = place.name || 
+                     extractPlaceNameFromAddress(place.formatted_address) || 
+                     'Unnamed Place';
+                     
+    const placeCategory = place.search_type || 
+                         place.types?.[0] || 
+                         place.type || 
+                         place.primary_type ||
+                         'Unknown Category';
+    
+    // Helper function to extract a reasonable place name from address
+    function extractPlaceNameFromAddress(address) {
+        if (!address) return null;
+        // Try to extract business name or use the first part of address
+        const parts = address.split(',');
+        return parts[0]?.trim();
+    }
 
     const handleExport = () => {
         // Create comprehensive export data
@@ -90,9 +132,9 @@ const PlaceDetailsSidebar = ({ isOpen, onClose, data }) => {
                         </div>
                     </div>
                     <div style={styles.placeHeaderText}>
-                        <h2 style={styles.placeName}>{place.name || 'Unnamed Place'}</h2>
+                        <h2 style={styles.placeName}>{placeName}</h2>
                         <div style={styles.placeCategory}>
-                            {place.primary_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown Category'}
+                            {placeCategory.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </div>
                     </div>
                 </div>
@@ -129,6 +171,25 @@ const PlaceDetailsSidebar = ({ isOpen, onClose, data }) => {
                             <strong>Address:</strong> {place.formatted_address}
                         </div>
                     )}
+                    
+                    {/* Show coordinates if available */}
+                    {(place.coordinates || (place.lat && place.lng)) && (
+                        <div style={styles.infoItem}>
+                            <strong>Coordinates:</strong> {
+                                place.coordinates 
+                                    ? `${place.coordinates.lat}, ${place.coordinates.lng}`
+                                    : `${place.lat}, ${place.lng}`
+                            }
+                        </div>
+                    )}
+                    
+                    {/* Show place ID */}
+                    {place.place_id && (
+                        <div style={styles.infoItem}>
+                            <strong>Place ID:</strong> <code style={styles.code}>{place.place_id}</code>
+                        </div>
+                    )}
+                    
                     {place.formatted_phone_number && (
                         <div style={styles.infoItem}>
                             <strong>Phone:</strong> 
@@ -221,7 +282,18 @@ const PlaceDetailsSidebar = ({ isOpen, onClose, data }) => {
                     ))}
                 </div>
             ) : (
-                <p style={styles.noData}>Opening hours not available</p>
+                <div style={styles.noData}>
+                    <p>⏰ Opening hours not available from current API</p>
+                    <div style={styles.mockData}>
+                        <p style={styles.helpText}>
+                            <strong>API Issue:</strong> The backend endpoint is only returning basic location data (lat, lng, address) instead of full Google Places details.
+                        </p>
+                        <p style={styles.helpText}>
+                            To fix this, the backend needs to call Google Places Details API with the place_id to get:
+                            opening_hours, reviews, photos, rating, phone number, website, etc.
+                        </p>
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -289,7 +361,12 @@ const PlaceDetailsSidebar = ({ isOpen, onClose, data }) => {
                     ))}
                 </div>
             ) : (
-                <p style={styles.noData}>No reviews available</p>
+                <div style={styles.noData}>
+                    <p>⭐ No reviews available from current API</p>
+                    <p style={styles.helpText}>
+                        Reviews require full Google Places API data which includes formatted_reviews field.
+                    </p>
+                </div>
             )}
         </div>
     );
@@ -370,7 +447,7 @@ const styles = {
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '-2px 0 10px rgba(0, 0, 0, 0.1)',
-        zIndex: 1000,
+        zIndex: 1600,
         position: 'fixed',
         right: 0,
         top: 0,
@@ -672,6 +749,27 @@ const styles = {
         fontSize: '14px',
         padding: '40px 20px',
         fontStyle: 'italic'
+    },
+    code: {
+        backgroundColor: '#f5f5f5',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        color: '#666'
+    },
+    helpText: {
+        fontSize: '13px',
+        color: '#666',
+        lineHeight: '1.4',
+        margin: '10px 0'
+    },
+    mockData: {
+        backgroundColor: '#f8f9fa',
+        padding: '15px',
+        borderRadius: '8px',
+        border: '1px solid #dee2e6',
+        marginTop: '10px'
     }
 };
 

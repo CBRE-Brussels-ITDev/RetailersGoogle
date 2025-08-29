@@ -197,33 +197,64 @@ app.post('/get-places-in-radius', async (req, res) => {
             );
 
             // Extract coordinates and create enhanced place data
-            const placesWithCoords = uniquePlaces.map(place => ({
-                place_id: place.place_id,
-                name: place.name,
-                rating: place.rating,
-                user_ratings_total: place.user_ratings_total,
-                types: place.types,
-                search_type: place.search_type,
-                coordinates: {
-                    lat: place.geometry.location.lat,
-                    lng: place.geometry.location.lng
-                },
-                vicinity: place.vicinity,
-                price_level: place.price_level,
-                business_status: place.business_status
-            }));
+                // Fetch full details for each place using Google Places Details API
+                const placesWithDetails = await Promise.all(uniquePlaces.map(async (place) => {
+                    try {
+                        const detailsResponse = await axios.get(
+                            `https://maps.googleapis.com/maps/api/place/details/json`,
+                            {
+                                params: {
+                                    place_id: place.place_id,
+                                    fields: [
+                                        'place_id', 'name', 'formatted_address', 'vicinity',
+                                        'formatted_phone_number', 'international_phone_number', 'website', 'url',
+                                        'geometry', 'plus_code', 'utc_offset',
+                                        'business_status', 'opening_hours', 'current_opening_hours', 'secondary_opening_hours',
+                                        'price_level', 'rating', 'user_ratings_total', 'types',
+                                        'photos', 'reviews',
+                                        'wheelchair_accessible_entrance', 'delivery', 'dine_in', 'takeout',
+                                        'reservable', 'serves_beer', 'serves_breakfast', 'serves_brunch',
+                                        'serves_dinner', 'serves_lunch', 'serves_vegetarian_food', 'serves_wine',
+                                        'address_components', 'adr_address',
+                                        'editorial_summary'
+                                    ].join(','),
+                                    key: API_KEY,
+                                },
+                            }
+                        );
+                        const placeData = detailsResponse.data.result;
+                        return {
+                            ...place,
+                            ...placeData,
+                            coordinates: placeData.geometry ? {
+                                lat: placeData.geometry.location.lat,
+                                lng: placeData.geometry.location.lng
+                            } : place.coordinates,
+                            photo_urls: placeData.photos ? placeData.photos.map(photo => 
+                                `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${API_KEY}`
+                            ) : [],
+                            formatted_reviews: placeData.reviews ? placeData.reviews.map(review => ({
+                                ...review,
+                                relative_time_description: review.relative_time_description,
+                                formatted_time: new Date(review.time * 1000).toLocaleDateString(),
+                                rating_stars: '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating)
+                            })) : []
+                        };
+                    } catch (err) {
+                        console.error('Error fetching details for place:', place.place_id, err.message);
+                        return place; // fallback to basic info
+                    }
+                }));
 
-            const placeIds = uniquePlaces.map(place => place.place_id);
-            
-            console.log(`Found ${uniquePlaces.length} unique places across ${commonTypes.length} categories`);
-            
-            res.json({ 
-                placeIds,
-                places: placesWithCoords,
-                totalFound: uniquePlaces.length,
-                searchTypes: commonTypes,
-                searchParams: { lat, lng, radius, getAllSectors: true }
-            });
+                const placeIds = placesWithDetails.map(place => place.place_id);
+                console.log(`Found ${placesWithDetails.length} unique places with full details`);
+                res.json({ 
+                    placeIds,
+                    places: placesWithDetails,
+                    totalFound: placesWithDetails.length,
+                    searchTypes: commonTypes,
+                    searchParams: { lat, lng, radius, getAllSectors: true }
+                });
 
         } else if (category) {
             console.log('Fetching single category:', category);

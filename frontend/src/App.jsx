@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import './index.css';
 import Map from './components/Map';
 import PlaceDetailsSidebar from './components/PlaceDetailsSidebar';
@@ -9,6 +9,34 @@ import CommerceRankingReport from './components/CommerceRankingReport';
 import GooglePlacesService from './services/GooglePlaces';
 
 function App() {
+  // Add animated dots component
+  const JumpingDots = () => {
+    const [activeDot, setActiveDot] = useState(0);
+    
+    useEffect(() => {
+      const interval = setInterval(() => {
+        setActiveDot(prev => (prev + 1) % 3);
+      }, 300);
+      
+      return () => clearInterval(interval);
+    }, []);
+    
+    return (
+      <div style={styles.jumpingDots}>
+        {[0, 1, 2].map(index => (
+          <div
+            key={index}
+            style={{
+              ...styles.dot,
+              transform: activeDot === index ? 'scale(1.3)' : 'scale(0.8)',
+              opacity: activeDot === index ? 1 : 0.6,
+              transition: 'all 0.3s ease'
+            }}
+          ></div>
+        ))}
+      </div>
+    );
+  };
   const mapRef = useRef(null);
   
   // Existing state
@@ -34,14 +62,45 @@ function App() {
   const [analysisResults, setAnalysisResults] = useState(null);
   const [showRankingReport, setShowRankingReport] = useState(false);
 
-  const handlePlaceClick = async (placeId) => {
+    const handlePlaceClick = async (placeId) => {
+    console.log('🚀 === PLACE CLICK HANDLER STARTED ===');
+    console.log('🎯 Place ID received:', placeId);
+    console.log('📊 Current showCatchmentMode:', showCatchmentMode);
+    console.log('📋 Current isPlaceDetailsSidebarOpen:', isPlaceDetailsSidebarOpen);
+    console.log('📦 Current placeDetails state:', placeDetails);
+    
     try {
+      console.log('🔄 Fetching complete place details from API...');
+      console.log('🌐 API URL being called:', `${import.meta.env.VITE_API_URL || 'https://coral-app-adar7.ondigitalocean.app'}/google-maps/place/${placeId}`);
+      
       const response = await GooglePlacesService.getPlaceDetails(placeId);
-      console.log('Place Details Response:', response);
+      console.log('✅ Place Details API Response received:');
+      console.log('📄 Response status:', response.status);
+      console.log('🗂️ Response data keys:', response ? Object.keys(response) : 'No response');
+      console.log('🏢 Place name:', response?.result?.name || response?.name || 'Name not found');
+      console.log('⭐ Place rating:', response?.result?.rating || response?.rating || 'Rating not found');
+      console.log('📞 Place phone:', response?.result?.formatted_phone_number || response?.formatted_phone_number || 'Phone not found');
+      console.log('🕐 Opening hours:', response?.result?.opening_hours || response?.opening_hours || 'Hours not found');
+      console.log('💬 Reviews count:', response?.result?.reviews?.length || response?.reviews?.length || 'Reviews not found');
+      console.log('📸 Photos count:', response?.result?.photos?.length || response?.photos?.length || 'Photos not found');
+      console.log('🔗 Full response object:', JSON.stringify(response, null, 2));
+      
       setPlaceDetails(response);
-      setIsPlaceDetailsSidebarOpen(true);
+      console.log('💾 Place details saved to state');
+      
+      // Add a small delay to ensure the sidebar opens after any re-renders
+      setTimeout(() => {
+        setIsPlaceDetailsSidebarOpen(true);
+        console.log('🎨 Place details sidebar should now be open');
+        console.log('🔍 Final state - isOpen:', true, 'hasData:', !!response);
+      }, 50);
     } catch (error) {
-      console.error('Error fetching place details:', error);
+      console.error('❌ Error fetching place details:', error);
+      console.error('🐛 Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
     }
   };
 
@@ -176,19 +235,21 @@ function App() {
         selectedLocation,
         params.travelMode,
         params.driveTimes,
-        params.showDemographics
+        params.showDemographics,
+        params.colors // Pass the colors from the color picker
       );
       
       console.log('FRONTEND: Catchment calculation response:', response);
       console.log('FRONTEND: Setting catchmentData to:', response.catchmentResults);
+      console.log('FRONTEND: Using colors for map rendering:', params.colors);
       
       setCatchmentData(response.catchmentResults || []);
       setShowCatchmentResults(true);
       
-      // Add catchment polygons to map
+      // Add catchment polygons to map with colors
       if (mapRef.current && response.catchmentResults && response.catchmentResults.length > 0) {
-        console.log('Adding catchment polygons to map');
-        mapRef.current.addCatchmentPolygons(response.catchmentResults);
+        console.log('Adding catchment polygons to map with colors:', params.colors);
+        mapRef.current.addCatchmentPolygons(response.catchmentResults, params.colors);
       }
       
     } catch (error) {
@@ -249,9 +310,7 @@ function App() {
 
   const toggleCatchmentMode = () => {
     setShowCatchmentMode(prev => !prev);
-    // Clear existing data when switching modes
-    setSearchResults([]);
-    setSearchResultsData([]);
+    // Clear catchment-specific data when switching modes, but keep place search results
     setCatchmentData([]);
     setShowCatchmentResults(false);
     if (mapRef.current) {
@@ -758,8 +817,8 @@ function App() {
         onShowCommerceAnalysis={!showCatchmentMode ? handleShowCommerceAnalysis : null}
       />
 
-      {/* Right Sidebar for Place Details - Only in places mode */}
-      {!showCatchmentMode && isPlaceDetailsSidebarOpen && (
+      {/* Right Sidebar for Place Details - Available in both modes */}
+      {isPlaceDetailsSidebarOpen && (
         <PlaceDetailsSidebar
           isOpen={isPlaceDetailsSidebarOpen}
           onClose={() => setIsPlaceDetailsSidebarOpen(false)}
@@ -847,9 +906,9 @@ function App() {
       {isLoading && (
         <div style={styles.loadingOverlay}>
           <div style={styles.loadingContent}>
-            <div style={styles.spinner}></div>
+            <JumpingDots />
             <h3 style={styles.loadingText}>
-              {showCatchmentMode ? 'Calculating Catchment...' : 'Loading...'}
+              {showCatchmentMode ? 'Calculating Catchment...' : ''}
             </h3>
           </div>
         </div>
@@ -1071,14 +1130,19 @@ const styles = {
     textAlign: 'center',
     color: 'white'
   },
-  spinner: {
-    width: '60px',
-    height: '60px',
-    border: '6px solid #f3f3f3',
-    borderTop: '6px solid #007bff',
+  jumpingDots: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: '20px'
+  },
+  dot: {
+    width: '12px',
+    height: '12px',
+    margin: '0 5px',
+    backgroundColor: '#007bff',
     borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    margin: '0 auto 20px'
+    display: 'inline-block'
   },
   loadingText: {
     fontSize: '18px',

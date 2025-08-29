@@ -2,16 +2,6 @@ import React, { useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 import logo from '../assets/CBRE_white.svg';
 
-// Catchment colors matching JSReport template
-const getCatchmentColor = (index) => {
-  const colors = [
-    'rgb(114, 151, 153)', // First catchment
-    'rgb(139, 169, 171)', // Second catchment  
-    'rgb(176, 195, 196)'  // Third catchment
-  ];
-  return colors[index] || colors[0];
-};
-
 const CatchmentSidebar = ({ 
   visible, 
   places, 
@@ -38,7 +28,28 @@ const CatchmentSidebar = ({
   const [travelMode, setTravelMode] = useState('driving');
   const [driveTimes, setDriveTimes] = useState([10, 20, 30]); // Max 3 catchments
   const [customTime, setCustomTime] = useState('');
-  const [showDemographics, setShowDemographics] = useState(true);
+  
+  // Single base color for all catchments with different opacities
+  const [baseColor, setBaseColor] = useState('#729799'); // Base color for all catchments
+  
+  // Generate catchment colors with different opacities based on base color
+  const getCatchmentColors = () => {
+    const opacities = [1.0, 0.7, 0.4]; // 100%, 70%, 40%
+    const hexToRgba = (hex, alpha) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+    
+    return opacities.map(opacity => hexToRgba(baseColor, opacity));
+  };
+
+  // Catchment colors matching JSReport template - fallback function
+  const getCatchmentColor = (index) => {
+    const colors = getCatchmentColors();
+    return colors[index] || colors[0] || 'rgba(114, 151, 153, 1.0)';
+  };
 
   // Radius options
   const getCategoryEmoji = (category) => {
@@ -130,7 +141,8 @@ const radiusOptions = [
       onCatchmentCalculate({
         travelMode,
         driveTimes,
-        showDemographics
+        showDemographics: true, // Always include demographic data
+        colors: getCatchmentColors() // Pass the generated colors
       });
     }
   };
@@ -151,6 +163,11 @@ const radiusOptions = [
     if (driveTimes.length > 1) {
       setDriveTimes(driveTimes.filter(time => time !== timeToRemove));
     }
+  };
+
+  // Handle color change for all catchment areas
+  const handleColorChange = (color) => {
+    setBaseColor(color);
   };
 
   // Get unique place types for filter dropdown
@@ -199,6 +216,7 @@ const radiusOptions = [
       transform: visible ? 'translateX(0)' : 'translateX(-100%)',
       transition: 'transform 0.3s ease-in-out'
     }}>
+        {/* Fixed Header */}
         <div style={styles.header}>
           <div style={styles.headerContent}>
             <img src={logo} alt="CBRE" style={styles.logo} />
@@ -215,31 +233,12 @@ const radiusOptions = [
           </div>
         </div>
 
-        {/* Toggle Mode Button at bottom */}
-        <div style={{
-          position: 'absolute',
-          bottom: 20,
-          left: 0,
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'center'
-        }}>
-          <button
-            onClick={onToggleMode}
-            style={{
-          ...styles.toggleModeButton,
-          backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545',
-          width: '90%'
-            }}
-          >
-            {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
-          </button>
-        </div>
-
-      {/* Content based on mode */}
-      {showCatchmentMode ? (
-        // CATCHMENT MODE
-        <div style={styles.searchSection}>
+        {/* Scrollable Content Area */}
+        <div style={styles.scrollableContent} className="sidebar-scrollable-content">
+          {/* Content based on mode */}
+          {showCatchmentMode ? (
+            // CATCHMENT MODE
+            <div style={styles.searchSection}>
           <h5 style={styles.sectionTitle}>
             🎯 Catchment Parameters
           </h5>
@@ -266,25 +265,44 @@ const radiusOptions = [
               </div>
             </div>
 
-            {/* Drive Times */}
+            {/* Drive Times with Inline Color Picker */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Drive Times (minutes) - Max 3:</label>
-              <div style={styles.timeChips}>
+              <div style={styles.driveTimeHeader}>
+                <label style={styles.label}>Drive Times (max 3):</label>
+                <div style={styles.inlineColorPicker}>
+                  <span style={styles.colorLabel}>Color:</span>
+                  <input
+                    type="color"
+                    value={baseColor}
+                    onChange={(e) => handleColorChange(e.target.value)}
+                    style={styles.colorPicker}
+                    title="Choose color for all catchment areas"
+                  />
+                  <span style={styles.colorNote}>100%, 70%, 40%</span>
+                </div>
+              </div>
+
+              <div style={styles.scrollableTimeContainer} className="scrollable-time-container">
                 {driveTimes.map((time, index) => (
-                  <div key={time} style={{
-                    ...styles.timeChip,
-                    backgroundColor: getCatchmentColor(index)
-                  }}>
-                    <span>{time}min</span>
-                    {driveTimes.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeTime(time)}
-                        style={styles.removeTimeButton}
-                      >
-                        ×
-                      </button>
-                    )}
+                  <div key={time} style={styles.timeChipWrapper}>
+                    <div style={{
+                      ...styles.timeChip,
+                      backgroundColor: getCatchmentColor(index)
+                    }}>
+                      <span>{time}min</span>
+                      {driveTimes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeTime(time)}
+                          style={styles.removeTimeButton}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <span style={styles.opacityLabel}>
+                      {index === 0 ? '100%' : index === 1 ? '70%' : '40%'} opacity
+                    </span>
                   </div>
                 ))}
               </div>
@@ -317,23 +335,11 @@ const radiusOptions = [
               </div>
             </div>
 
-            {/* Demographics Option */}
-            <div style={styles.formGroup}>
-              <label style={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={showDemographics}
-                  onChange={(e) => setShowDemographics(e.target.checked)}
-                  style={styles.checkbox}
-                />
-                Include demographic data
-              </label>
-            </div>
-
             {/* Calculate Button */}
             <button
               type="submit"
               disabled={!selectedLocation || isLoading || driveTimes.length === 0}
+              className="calculate-catchment-button"
               style={{
                 ...styles.calculateButton,
                 ...((!selectedLocation || isLoading || driveTimes.length === 0) ? styles.disabledButton : {})
@@ -485,8 +491,13 @@ const radiusOptions = [
               }}
             >
               {isLoading ? (
-                <span>
-                  <span style={styles.spinner}>⟳</span> Searching Places...
+                <span style={styles.loadingContainer}>
+                  <span style={styles.jumpingDots}>
+                    <span style={{...styles.dot, animationDelay: '0s'}}>•</span>
+                    <span style={{...styles.dot, animationDelay: '0.2s'}}>•</span>
+                    <span style={{...styles.dot, animationDelay: '0.4s'}}>•</span>
+                  </span>
+                  <span style={styles.loadingTextInline}>Searching Places</span>
                 </span>
               ) : (
                 <span>
@@ -498,9 +509,20 @@ const radiusOptions = [
 
           {/* Progress Indicator for Loading */}
           {isLoading && (
-            <div style={styles.loadingProgress}>
-              <div style={styles.progressBar}>
-                <div style={styles.progressFill}></div>
+            <div style={{
+              position: 'fixed',
+              inset: '0px',
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 2000
+            }}>
+              <div style={styles.jumpingDots}>
+                <div className="dot"></div>
+                <div className="dot"></div>
+                <div className="dot"></div>
               </div>
               <div style={styles.loadingText}>
                 {getAllSectors ? 'Scanning all business types...' : 'Searching for places...'}
@@ -551,8 +573,24 @@ const radiusOptions = [
               )}
             </div>
           )}
+          {/* End Places Mode */}
         </div>
-      )}
+          )}
+        </div>
+        {/* End Scrollable Content */}
+
+        {/* Fixed Toggle Mode Button at bottom */}
+        <div style={styles.fixedBottomButton}>
+          <button
+            onClick={onToggleMode}
+            style={{
+              ...styles.toggleModeButton,
+              backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545'
+            }}
+          >
+            {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
+          </button>
+        </div>
     </div>
   );
 };
@@ -717,16 +755,83 @@ const styles = {
     gap: '8px',
     marginBottom: '10px'
   },
+  timeChipsContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '10px'
+  },
+  driveTimeHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px',
+    flexWrap: 'wrap',
+    gap: '8px'
+  },
+  inlineColorPicker: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  scrollableTimeContainer: {
+    maxHeight: '120px',
+    overflowY: 'auto',
+    padding: '4px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    marginBottom: '8px',
+    
+    /* Custom scrollbar styling */
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'rgba(255,255,255,0.3) rgba(255,255,255,0.1)'
+  },
+  timeChipWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '4px 6px',
+    borderRadius: '4px',
+    marginBottom: '4px'
+  },
   timeChip: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '4px 8px',
+    padding: '6px 10px',
     backgroundColor: '#17E88F',
     color: '#032842',
     borderRadius: '12px',
     fontSize: '12px',
-    fontWeight: '500'
+    fontWeight: '500',
+    minWidth: '60px',
+    justifyContent: 'center'
+  },
+  colorPicker: {
+    width: '28px',
+    height: '28px',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    outline: 'none'
+  },
+  colorLabel: {
+    fontSize: '11px',
+    fontWeight: '500',
+    color: 'white',
+    minWidth: '35px'
+  },
+  colorNote: {
+    fontSize: '9px',
+    color: 'rgba(255,255,255,0.6)',
+    fontStyle: 'italic'
+  },
+  opacityLabel: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500',
+    minWidth: '70px'
   },
   removeTimeButton: {
     background: 'none',
@@ -777,19 +882,27 @@ const styles = {
     transition: 'background-color 0.2s'
   },
   calculateButton: {
-    padding: '12px 20px',
-    backgroundColor: '#28a745',
+    padding: '10px 16px',
+    background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
     color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
+    border: '2px solid #28a745',
+    borderRadius: '6px',
+    fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
-    transition: 'background-color 0.2s'
+    transition: 'all 0.3s ease',
+    boxShadow: '0 3px 8px rgba(40, 167, 69, 0.3)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px',
+    width: '100%',
+    marginTop: '8px'
   },
   disabledButton: {
-    backgroundColor: '#666',
-    cursor: 'not-allowed'
+    background: 'linear-gradient(135deg, #6c757d 0%, #5a6268 100%)',
+    borderColor: '#6c757d',
+    cursor: 'not-allowed',
+    boxShadow: 'none',
+    opacity: '0.6'
   },
   resultsInfo: {
     fontSize: '12px',
@@ -871,6 +984,25 @@ const styles = {
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     margin: '0 auto 15px'
+  },
+  loadingContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  jumpingDots: {
+    display: 'flex',
+    gap: '2px'
+  },
+  dot: {
+    fontSize: '20px',
+    color: 'white',
+    animation: 'jumpingDots 1.5s infinite ease-in-out',
+    display: 'inline-block'
+  },
+  loadingTextInline: {
+    color: 'white',
+    fontSize: '14px'
   },
   placesList: {
     flex: 1,
@@ -1219,10 +1351,11 @@ const styles = {
     animation: 'progress 2s ease-in-out infinite'
   },
   loadingText: {
-    fontSize: '12px',
-    color: '#856404',
+    fontSize: '14px',
+    color: 'white',
     textAlign: 'center',
-    fontWeight: '500'
+    fontWeight: '500',
+    marginTop: '15px'
   },
   enhancedResultsInfo: {
     marginTop: '12px',
@@ -1351,6 +1484,35 @@ const styles = {
     fontSize: '12px',
     color: '#155724',
     fontWeight: '500'
+  },
+  scrollableContent: {
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: '0',
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'rgba(255,255,255,0.3) transparent'
+  },
+  fixedBottomButton: {
+    padding: '15px 20px',
+    borderTop: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: '#032842',
+    flexShrink: 0
+  },
+  toggleModeButton: {
+    width: '100%',
+    padding: '12px',
+    border: 'none',
+    borderRadius: '8px',
+    color: 'white',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px'
   }
 };
 
@@ -1377,6 +1539,12 @@ const animationKeyframes = `
     100% { opacity: 1; transform: translateY(0); }
   }
   
+  @keyframes jumpingDots {
+    0%, 20% { transform: translateY(0); }
+    40% { transform: translateY(-8px); }
+    80%, 100% { transform: translateY(0); }
+  }
+  
   .search-section {
     animation: fadeIn 0.5s ease-out;
   }
@@ -1401,6 +1569,17 @@ const animationKeyframes = `
     box-shadow: 0 6px 16px rgba(23, 232, 143, 0.5) !important;
   }
   
+  .calculate-catchment-button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(40, 167, 69, 0.5) !important;
+    background: linear-gradient(135deg, #20c997 0%, #28a745 100%) !important;
+  }
+  
+  .calculate-catchment-button:active {
+    transform: translateY(0px) !important;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+  }
+  
   .primary-action-button:hover {
     transform: translateY(-1px) scale(1.02) !important;
     box-shadow: 0 4px 12px rgba(23, 232, 143, 0.4) !important;
@@ -1415,6 +1594,44 @@ const animationKeyframes = `
   .search-section:hover {
     transform: translateX(2px);
     box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+  }
+  
+  /* Custom scrollbar for webkit browsers */
+  .scrollable-time-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollable-time-container::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+  }
+  
+  .scrollable-time-container::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
+  }
+  
+  .scrollable-time-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.5);
+  }
+
+  /* Sidebar scrollable content styles */
+  .sidebar-scrollable-content::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .sidebar-scrollable-content::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 3px;
+  }
+  
+  .sidebar-scrollable-content::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
+  }
+  
+  .sidebar-scrollable-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.5);
   }
 `;
 
