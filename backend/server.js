@@ -197,64 +197,33 @@ app.post('/get-places-in-radius', async (req, res) => {
             );
 
             // Extract coordinates and create enhanced place data
-                // Fetch full details for each place using Google Places Details API
-                const placesWithDetails = await Promise.all(uniquePlaces.map(async (place) => {
-                    try {
-                        const detailsResponse = await axios.get(
-                            `https://maps.googleapis.com/maps/api/place/details/json`,
-                            {
-                                params: {
-                                    place_id: place.place_id,
-                                    fields: [
-                                        'place_id', 'name', 'formatted_address', 'vicinity',
-                                        'formatted_phone_number', 'international_phone_number', 'website', 'url',
-                                        'geometry', 'plus_code', 'utc_offset',
-                                        'business_status', 'opening_hours', 'current_opening_hours', 'secondary_opening_hours',
-                                        'price_level', 'rating', 'user_ratings_total', 'types',
-                                        'photos', 'reviews',
-                                        'wheelchair_accessible_entrance', 'delivery', 'dine_in', 'takeout',
-                                        'reservable', 'serves_beer', 'serves_breakfast', 'serves_brunch',
-                                        'serves_dinner', 'serves_lunch', 'serves_vegetarian_food', 'serves_wine',
-                                        'address_components', 'adr_address',
-                                        'editorial_summary'
-                                    ].join(','),
-                                    key: API_KEY,
-                                },
-                            }
-                        );
-                        const placeData = detailsResponse.data.result;
-                        return {
-                            ...place,
-                            ...placeData,
-                            coordinates: placeData.geometry ? {
-                                lat: placeData.geometry.location.lat,
-                                lng: placeData.geometry.location.lng
-                            } : place.coordinates,
-                            photo_urls: placeData.photos ? placeData.photos.map(photo => 
-                                `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${API_KEY}`
-                            ) : [],
-                            formatted_reviews: placeData.reviews ? placeData.reviews.map(review => ({
-                                ...review,
-                                relative_time_description: review.relative_time_description,
-                                formatted_time: new Date(review.time * 1000).toLocaleDateString(),
-                                rating_stars: '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating)
-                            })) : []
-                        };
-                    } catch (err) {
-                        console.error('Error fetching details for place:', place.place_id, err.message);
-                        return place; // fallback to basic info
-                    }
-                }));
+            const placesWithCoords = uniquePlaces.map(place => ({
+                place_id: place.place_id,
+                name: place.name,
+                rating: place.rating,
+                user_ratings_total: place.user_ratings_total,
+                types: place.types,
+                search_type: place.search_type,
+                coordinates: {
+                    lat: place.geometry.location.lat,
+                    lng: place.geometry.location.lng
+                },
+                vicinity: place.vicinity,
+                price_level: place.price_level,
+                business_status: place.business_status
+            }));
 
-                const placeIds = placesWithDetails.map(place => place.place_id);
-                console.log(`Found ${placesWithDetails.length} unique places with full details`);
-                res.json({ 
-                    placeIds,
-                    places: placesWithDetails,
-                    totalFound: placesWithDetails.length,
-                    searchTypes: commonTypes,
-                    searchParams: { lat, lng, radius, getAllSectors: true }
-                });
+            const placeIds = uniquePlaces.map(place => place.place_id);
+            
+            console.log(`Found ${uniquePlaces.length} unique places across ${commonTypes.length} categories`);
+            
+            res.json({ 
+                placeIds,
+                places: placesWithCoords,
+                totalFound: uniquePlaces.length,
+                searchTypes: commonTypes,
+                searchParams: { lat, lng, radius, getAllSectors: true }
+            });
 
         } else if (category) {
             console.log('Fetching single category:', category);
@@ -1968,36 +1937,47 @@ app.post('/api/autocomplete', async (req, res) => {
 app.post('/api/place-details', async (req, res) => {
     try {
         const { place_id } = req.body;
-        
         if (!place_id) {
             return res.status(400).json({ error: 'Place ID is required' });
         }
 
-        console.log(`Getting place details for: ${place_id}`);
-        
-        // Use Google Places Details API
+        console.log(`Getting full place details for: ${place_id}`);
+
+        // Request all major fields from Google Places Details API
+        const fields = [
+            'place_id', 'name', 'formatted_address', 'vicinity',
+            'formatted_phone_number', 'international_phone_number', 'website', 'url',
+            'geometry', 'plus_code', 'utc_offset',
+            'business_status', 'opening_hours', 'current_opening_hours', 'secondary_opening_hours',
+            'price_level', 'rating', 'user_ratings_total', 'types',
+            'photos', 'reviews',
+            'wheelchair_accessible_entrance', 'delivery', 'dine_in', 'takeout',
+            'reservable', 'serves_beer', 'serves_breakfast', 'serves_brunch',
+            'serves_dinner', 'serves_lunch', 'serves_vegetarian_food', 'serves_wine',
+            'address_components', 'adr_address',
+            'editorial_summary'
+        ].join(',');
+
         const response = await axios.get(
-            `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&fields=geometry,formatted_address,address_components&key=${API_KEY}`
+            `https://maps.googleapis.com/maps/api/place/details/json`,
+            {
+                params: {
+                    place_id,
+                    fields,
+                    key: API_KEY
+                }
+            }
         );
 
         if (response.data.status === 'OK') {
-            const result = response.data.result;
-            const location = result.geometry.location;
-            
-            res.json({
-                lat: location.lat,
-                lng: location.lng,
-                formatted_address: result.formatted_address,
-                address_components: result.address_components
-            });
+            res.json(response.data.result);
         } else {
-            res.status(404).json({ error: 'Place not found' });
+            res.status(404).json({ error: 'Place not found', details: response.data.status });
         }
-        
     } catch (error) {
-        console.error('Error getting place details:', error);
+        console.error('Error getting full place details:', error);
         res.status(500).json({ 
-            error: 'Failed to get place details',
+            error: 'Failed to get full place details',
             details: error.message 
         });
     }

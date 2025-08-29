@@ -62,52 +62,32 @@ function App() {
   const [analysisResults, setAnalysisResults] = useState(null);
   const [showRankingReport, setShowRankingReport] = useState(false);
 
+    // Track last place click to prevent reverse geocoding on marker click
+    const lastPlaceClickRef = useRef(null);
+
     const handlePlaceClick = async (placeId) => {
-    console.log('🚀 === PLACE CLICK HANDLER STARTED ===');
-    console.log('🎯 Place ID received:', placeId);
-    console.log('📊 Current showCatchmentMode:', showCatchmentMode);
-    console.log('📋 Current isPlaceDetailsSidebarOpen:', isPlaceDetailsSidebarOpen);
-    console.log('📦 Current placeDetails state:', placeDetails);
-    
-    try {
-      console.log('🔄 Fetching complete place details from API...');
-      console.log('🌐 API URL being called:', `${import.meta.env.VITE_API_URL || 'https://coral-app-adar7.ondigitalocean.app'}/google-maps/place/${placeId}`);
-      
-      const response = await GooglePlacesService.getPlaceDetails(placeId);
-      console.log('✅ Place Details API Response received:');
-      console.log('📄 Response status:', response.status);
-      console.log('🗂️ Response data keys:', response ? Object.keys(response) : 'No response');
-      console.log('🏢 Place name:', response?.result?.name || response?.name || 'Name not found');
-      console.log('⭐ Place rating:', response?.result?.rating || response?.rating || 'Rating not found');
-      console.log('📞 Place phone:', response?.result?.formatted_phone_number || response?.formatted_phone_number || 'Phone not found');
-      console.log('🕐 Opening hours:', response?.result?.opening_hours || response?.opening_hours || 'Hours not found');
-      console.log('💬 Reviews count:', response?.result?.reviews?.length || response?.reviews?.length || 'Reviews not found');
-      console.log('📸 Photos count:', response?.result?.photos?.length || response?.photos?.length || 'Photos not found');
-      console.log('🔗 Full response object:', JSON.stringify(response, null, 2));
-      
-      setPlaceDetails(response);
-      console.log('💾 Place details saved to state');
-      
-      // Add a small delay to ensure the sidebar opens after any re-renders
-      setTimeout(() => {
+      lastPlaceClickRef.current = Date.now();
+      setIsPlaceDetailsSidebarOpen(false); // Close sidebar before loading new details
+      setIsLoading(true);
+      try {
+        const response = await GooglePlacesService.getPlaceDetails(placeId);
+        setPlaceDetails(response); // Always pass the full details object to the sidebar
         setIsPlaceDetailsSidebarOpen(true);
-        console.log('🎨 Place details sidebar should now be open');
-        console.log('🔍 Final state - isOpen:', true, 'hasData:', !!response);
-      }, 50);
-    } catch (error) {
-      console.error('❌ Error fetching place details:', error);
-      console.error('🐛 Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
-      });
-    }
-  };
+      } catch (error) {
+        console.error('❌ Error fetching place details:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
   const handleMapClick = async (lat, lng) => {
+    // Prevent reverse geocoding if a place marker was just clicked
+    if (lastPlaceClickRef.current && Date.now() - lastPlaceClickRef.current < 300) {
+      console.log('Map click ignored due to recent place marker click');
+      return;
+    }
     setSelectedLocation({ lat, lng });
     console.log('Map clicked at:', { lat, lng });
-    
     // Get address from coordinates using reverse geocoding
     try {
       const address = await GooglePlacesService.reverseGeocode(lat, lng);
@@ -123,12 +103,10 @@ function App() {
       // Fallback to coordinates if reverse geocoding fails
       setSelectedAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     }
-    
     // Only clear search results in places mode
     if (!showCatchmentMode) {
       setSearchResults([]);
       setSearchResultsData([]);
-      
       // Clear existing circle when new location is selected
       if (mapRef.current) {
         mapRef.current.clearCircle();

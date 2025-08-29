@@ -286,21 +286,23 @@ const GooglePlacesService = {
 
     // Get place details from place_id
     async getPlaceDetails(placeId) {
-        console.log('Getting place details for:', placeId);
+        console.log('🔄 GooglePlacesService.getPlaceDetails called with:', placeId);
+        console.log('🌐 Making request to:', `${BASE_URL}/google-maps/place/${placeId}`);
         try {
-            const response = await axios.post(`${BASE_URL}/api/place-details`, {
-                place_id: placeId
-            });
-            
-            if (response.data) {
-                console.log('Place details:', response.data);
-                return response.data;
-            } else {
-                return null;
-            }
+            const response = await axios.get(`${BASE_URL}/google-maps/place/${placeId}`);
+            console.log('✅ API Response received:');
+            console.log('📊 Response status:', response.status);
+            console.log('📦 Response headers:', response.headers);
+            console.log('🗂️ Response data keys:', response.data ? Object.keys(response.data) : 'No data');
+            console.log('🏢 Place name from response:', response.data?.result?.name || 'No name in response');
+            console.log('🔗 Full response data:', JSON.stringify(response.data, null, 2));
+            return response.data;
         } catch (error) {
-            console.error('Error getting place details:', error);
-            return null;
+            console.error('❌ Error in GooglePlacesService.getPlaceDetails:', error);
+            console.error('🌐 Request URL was:', `${BASE_URL}/google-maps/place/${placeId}`);
+            console.error('📊 Error status:', error.response?.status);
+            console.error('📄 Error data:', error.response?.data);
+            throw error;
         }
     }
 };
