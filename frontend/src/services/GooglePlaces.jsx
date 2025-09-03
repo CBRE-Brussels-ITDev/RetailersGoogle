@@ -5,6 +5,29 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'https://coral-app-adar7.ondigi
 
 const GooglePlacesService = {
     // Existing methods...
+
+    // ArcGIS catchment calculation (drive-time polygons)
+    async getArcgisCatchment(center, breakTimes, travelMode = 'Driving Time') {
+        // Always send travelMode as a valid ArcGIS travel mode name
+        const validModes = [
+            "Driving Time", "Walking Time"
+        ];
+        let modeToSend = validModes.includes(travelMode) ? travelMode : 'Driving Time';
+        console.log('Requesting ArcGIS catchment:', { center, breakTimes, travelMode: modeToSend });
+        try {
+            const response = await axios.post(`${BASE_URL}/arcgis-catchment`, {
+                center, 
+                breakTimes,
+                travelMode: modeToSend
+            });
+            console.log('ArcGIS catchment response:', response.data);
+            // Return the data as-is for display
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching ArcGIS catchment:', error);
+            throw error;
+        }
+    },
     async getPlacesInRadius(lat, lng, radius, category = null, getAllSectors = false) {
         console.log('Fetching places in radius:', { lat, lng, radius, category, getAllSectors });
         try {

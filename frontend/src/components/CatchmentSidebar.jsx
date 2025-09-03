@@ -117,9 +117,7 @@ const radiusOptions = [
   // Travel mode options
   const travelModeOptions = [
     { value: 'driving', label: 'Driving', icon: '🚗' },
-    { value: 'walking', label: 'Walking', icon: '🚶' },
-    { value: 'bicycling', label: 'Bicycling', icon: '🚴' },
-    { value: 'transit', label: 'Transit', icon: '🚌' }
+    { value: 'walking', label: 'Walking', icon: '🚶' }
   ];
 
   // Handle places search submission

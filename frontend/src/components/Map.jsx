@@ -1,4 +1,4 @@
-import { useImperativeHandle, forwardRef, useRef, useEffect } from 'react';
+import { useImperativeHandle, forwardRef, useRef, useEffect, useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 
 const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData }, ref) => {
@@ -9,6 +9,26 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   const selectedLocationGraphic = useRef(null);
   const markersGraphics = useRef([]);
   const catchmentGraphics = useRef([]);
+  const [currentBasemap, setCurrentBasemap] = useState('gray-vector');
+  const [showBasemapGallery, setShowBasemapGallery] = useState(false);
+
+  // Basemap options matching the old tool design
+  const basemapOptions = [
+    { id: 'gray-vector', name: 'Light Gray Canvas', thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTAiIGhlaWdodD0iNjUiIHZpZXdCb3g9IjAgMCA5MCA2NSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjY1IiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik0yMCAyMEg3MFY0NUgyMFYyMFoiIHN0cm9rZT0iIzk5OTk5OSIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIi8+Cjx0ZXh0IHg9IjQ1IiB5PSIzNSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEwIiBmaWxsPSIjNjY2NjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5MaWdodCBHcmF5PC90ZXh0Pgo8L3N2Zz4K' },
+    { id: 'dark-gray-vector', name: 'Black Canvas', thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTAiIGhlaWdodD0iNjUiIHZpZXdCb3g9IjAgMCA5MCA2NSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjY1IiBmaWxsPSIjMzMzMzMzIi8+CjxwYXRoIGQ9Ik0yMCAyMEg3MFY0NUgyMFYyMFoiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIyIiBmaWxsPSJub25lIi8+Cjx0ZXh0IHg9IjQ1IiB5PSIzNSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEwIiBmaWxsPSIjOTk5OTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5EYXJrPC90ZXh0Pgo8L3N2Zz4K' },
+    { id: 'topo-vector', name: 'Topographic', thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTAiIGhlaWdodD0iNjUiIHZpZXdCb3g9IjAgMCA5MCA2NSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjY1IiBmaWxsPSIjRjBGOEZGIi8+CjxjaXJjbGUgY3g9IjQ1IiBjeT0iMzIiIHI9IjE1IiBzdHJva2U9IiM2NjY2NjYiIHN0cm9rZS13aWR0aD0iMSIgZmlsbD0ibm9uZSIvPgo8Y2lyY2xlIGN4PSI0NSIgY3k9IjMyIiByPSIxMCIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjEiIGZpbGw9Im5vbmUiLz4KPHRleHQgeD0iNDUiIHk9IjUwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiM2NjY2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlRvcG88L3RleHQ+Cjwvc3ZnPgo=' },
+    { id: 'streets-vector', name: 'Streets', thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTAiIGhlaWdodD0iNjUiIHZpZXdCb3g9IjAgMCA5MCA2NSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjY1IiBmaWxsPSIjRkZGRkZGIi8+CjxsaW5lIHgxPSIxMCIgeTE9IjMyIiB4Mj0iODAiIHkyPSIzMiIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjMiLz4KPGxpbmUgeDE9IjQ1IiB5MT0iMTAiIHgyPSI0NSIgeTI9IjU1IiBzdHJva2U9IiM2NjY2NjYiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI0NSIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzY2NjY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U3RyZWV0czwvdGV4dD4KPC9zdmc+Cg==' },
+    { id: 'streets-night-vector', name: 'Streets Night', thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iOTAiIGhlaWdodD0iNjUiIHZpZXdCb3g9IjAgMCA5MCA2NSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjkwIiBoZWlnaHQ9IjY1IiBmaWxsPSIjMjIyMjIyIi8+CjxsaW5lIHgxPSIxMCIgeTE9IjMyIiB4Mj0iODAiIHkyPSIzMiIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjMiLz4KPGxpbmUgeDE9IjQ1IiB5MT0iMTAiIHgyPSI0NSIgeTI9IjU1IiBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI0NSIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iI0ZGRkZGRiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TmlnaHQ8L3RleHQ+Cjwvc3ZnPgo=' }
+  ];
+
+  // Change basemap function
+  const changeBasemap = async (basemapId) => {
+    if (mapView.current && mapView.current.map) {
+      mapView.current.map.basemap = basemapId;
+      setCurrentBasemap(basemapId);
+      console.log('Changed basemap to:', basemapId);
+    }
+  };
 
   // Initialize ArcGIS modules
   useEffect(() => {
@@ -337,38 +357,38 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
               // Force map to refresh and recognize the new graphic
               mapView.current.requestUpdate();
 
-              // Add label in the center of the polygon
-              const centroid = polygon.centroid;
-              if (centroid) {
-                const labelSymbol = new TextSymbol.default({
-                  color: "white",
-                  haloColor: color.stroke,
-                  haloSize: 2,
-                  text: catchment.name,
-                  xoffset: 0,
-                  yoffset: 0,
-                  font: {
-                    size: 12, // Smaller, more discrete text
-                    family: "Arial",
-                    weight: "normal" // Less bold
-                  }
-                });
+              // Add label in the center of the polygon - REMOVED per user request
+              // const centroid = polygon.centroid;
+              // if (centroid) {
+              //   const labelSymbol = new TextSymbol.default({
+              //     color: "white",
+              //     haloColor: color.stroke,
+              //     haloSize: 2,
+              //     text: catchment.name,
+              //     xoffset: 0,
+              //     yoffset: 0,
+              //     font: {
+              //       size: 12, // Smaller, more discrete text
+              //       family: "Arial",
+              //       weight: "normal" // Less bold
+              //     }
+              //   });
 
-                const labelGraphic = new Graphic.default({
-                  geometry: centroid,
-                  symbol: labelSymbol,
-                  attributes: {
-                    type: 'catchment-label',
-                    driveTime: catchment.name
-                  }
-                });
+              //   const labelGraphic = new Graphic.default({
+              //     geometry: centroid,
+              //     symbol: labelSymbol,
+              //     attributes: {
+              //       type: 'catchment-label',
+              //       driveTime: catchment.name
+              //     }
+              //   });
 
-                graphicsLayer.current.add(labelGraphic);
-                catchmentGraphics.current.push(labelGraphic);
-                console.log(`Added label for: ${catchment.name} at:`, centroid.longitude, centroid.latitude);
-              } else {
-                console.warn('Could not calculate centroid for:', catchment.name);
-              }
+              //   graphicsLayer.current.add(labelGraphic);
+              //   catchmentGraphics.current.push(labelGraphic);
+              //   console.log(`Added label for: ${catchment.name} at:`, centroid.longitude, centroid.latitude);
+              // } else {
+              //   console.warn('Could not calculate centroid for:', catchment.name);
+              // }
 
             } catch (error) {
               console.error('Error creating polygon for catchment:', catchment.name, error);
@@ -728,7 +748,123 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         padding: 0
       }}
     >
-      
+      {/* Basemap Gallery - matching old tool design */}
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        right: '20px',
+        zIndex: 1500,
+        backgroundColor: 'rgba(252, 252, 252, 0.9)',
+        borderRadius: '8px',
+        padding: showBasemapGallery ? '15px' : '8px',
+        width: showBasemapGallery ? '280px' : '30px',
+        height: showBasemapGallery ? 'auto' : '25px',
+        transition: 'all 0.3s ease',
+        overflow: 'hidden',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: showBasemapGallery ? 'space-between' : 'center',
+          marginBottom: showBasemapGallery ? '12px' : '0',
+          whiteSpace: 'nowrap',
+          height: showBasemapGallery ? 'auto' : '24px'
+        }}>
+          {showBasemapGallery && (
+            <h5 style={{
+              margin: 0,
+              color: '#333',
+              fontSize: '13px',
+              fontWeight: '600'
+            }}>
+              Basemap options:
+            </h5>
+          )}
+          <button
+            onClick={() => setShowBasemapGallery(!showBasemapGallery)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#666',
+              fontSize: showBasemapGallery ? '14px' : '12px',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '4px',
+              transition: 'all 0.2s ease',
+              opacity: 0.7
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = 'rgba(0,0,0,0.1)';
+              e.target.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = 'transparent';
+              e.target.style.opacity = '0.7';
+            }}
+            title="Change basemap"
+          >
+            {showBasemapGallery ? '✕' : '🗺️'}
+          </button>
+        </div>
+
+        {showBasemapGallery && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            {basemapOptions.map(basemap => (
+              <div key={basemap.id} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '6px',
+                backgroundColor: currentBasemap === basemap.id ? 'rgba(0, 123, 255, 0.1)' : 'transparent',
+                border: currentBasemap === basemap.id ? '1px solid #007bff' : '1px solid transparent',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => changeBasemap(basemap.id)}
+              onMouseEnter={(e) => {
+                if (currentBasemap !== basemap.id) {
+                  e.target.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (currentBasemap !== basemap.id) {
+                  e.target.style.backgroundColor = 'transparent';
+                }
+              }}
+              >
+                <img
+                  src={basemap.thumbnail}
+                  alt={basemap.name}
+                  style={{
+                    width: '70px',
+                    height: '50px',
+                    border: '1px solid #ddd',
+                    borderRadius: '3px',
+                    objectFit: 'cover'
+                  }}
+                />
+                <label style={{
+                  color: '#333',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  textWrap: 'wrap',
+                  lineHeight: '1.3'
+                }}>
+                  {basemap.name}
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 });

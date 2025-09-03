@@ -142,90 +142,71 @@ const CatchmentResultsSidebar = ({
       <style>
         {`
           .results-sidebar-pdf-btn:hover {
-            background-color: #c0392b !important;
+            background-color: var(--color-main-hover, #17E88F) !important;
+            color: var(--color-main, #032842) !important;
             transform: translateY(-1px);
           }
           .results-sidebar-excel-btn:hover {
-            background-color: #218838 !important;
+            background-color: var(--color-main-hover, #17E88F) !important;
+            color: var(--color-main, #032842) !important;
             transform: translateY(-1px);
           }
           .results-sidebar-close-btn:hover {
             background-color: #f0f0f0 !important;
             color: #333 !important;
           }
+          .tab-button:hover {
+            background-color: var(--color-main-hover, #17E88F) !important;
+            color: var(--color-main, #032842) !important;
+          }
+          .tab-button.active {
+            background-color: var(--color-main, #032842) !important;
+            color: white !important;
+            border: 1px solid var(--color-main, #032842) !important;
+          }
+          :root {
+            --color-data-light-blue: #3E7CA6;
+            --color-dark-grey: #435254;
+            --color-sage: #538184;
+            --color-celadon: #80BBAD;
+            --color-celadon-tint: #C0D4CB;
+            --color-data-purple: #885073;
+            --color-midnight-tint: #778F9C;
+            --color-midnight: #032842;
+            --color-negative-red: #AD2A2A;
+            --color-accent-green: #17E88F;
+            --color-main: var(--color-midnight);
+            --color-main-hover: var(--color-accent-green);
+          }
         `}
       </style>
       <div style={styles.sidebar}>
-      {/* Header */}
+      {/* Header - matching old design */}
       <div style={styles.header}>
         <div style={styles.headerContent}>
-          <h3 style={styles.headerTitle}>🎯 Catchment Analysis</h3>
-          <div style={styles.locationInfo}>
-            📍 {selectedLocation ? 
-              `${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}` : 
-              'Selected Location'
-            }
-          </div>
+          <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTExIDJMMTMuMDkgOC4yNkwyMCA5TDE0IDEyTDE2IDIwTDExIDEzTDYgMjBMOCAxMkwyIDlMOC45MSA4LjI2TDExIDJaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" alt="catchment-icon" style={styles.headerIcon} />
+          <span style={styles.headerTitle}>Catchment Details</span>
         </div>
-        <div style={styles.headerActions}>
-          <div style={styles.exportButtons}>
-            <button 
-              className="results-sidebar-pdf-btn"
-              onClick={onGeneratePDF}
-              disabled={isGeneratingPDF}
-              style={{
-                ...styles.pdfButton,
-                opacity: isGeneratingPDF ? 0.6 : 1
-              }}
-            >
-              {isGeneratingPDF ? '📄 Generating...' : '📄 PDF'}
-            </button>
-            <button
-              className="results-sidebar-excel-btn"
-              onClick={() => onExportCatchmentExcel && onExportCatchmentExcel()}
-              disabled={isGeneratingPDF}
-              style={{
-                ...styles.excelButton,
-                opacity: isGeneratingPDF ? 0.6 : 1
-              }}
-            >
-              📊 Catchment
-            </button>
-            {placesData && placesData.length > 0 && (
-              <button
-                className="results-sidebar-excel-btn"
-                onClick={() => onExportPlacesExcel && onExportPlacesExcel()}
-                disabled={isGeneratingPDF}
-                style={{
-                  ...styles.excelButton,
-                  opacity: isGeneratingPDF ? 0.6 : 1
-                }}
-              >
-                📊 Places
-              </button>
-            )}
-          </div>
-          <button 
-            className="results-sidebar-close-btn"
-            style={styles.closeButton} 
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
+        <button 
+          className="results-sidebar-close-btn"
+          style={styles.closeButton} 
+          onClick={onClose}
+        >
+          ✕
+        </button>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - matching old nav-tabs style */}
       <div style={styles.tabsContainer}>
         <div style={styles.tabHeaders}>
           {catchmentData.map((catchment, index) => (
             <button
               key={index}
+              className={`tab-button ${activeTab === index ? 'active' : ''}`}
               onClick={() => setActiveTab(index)}
               style={{
                 ...styles.tabButton,
-                ...(activeTab === index ? styles.tabButtonActive : {}),
-                borderBottomColor: getTimeColor(index)
+                ...(activeTab === index ? styles.tabButtonActive : {})
               }}
             >
               {catchment.name}
@@ -236,177 +217,159 @@ const CatchmentResultsSidebar = ({
 
       {/* Content */}
       <div style={styles.content}>
-        {/* Summary Stats */}
-        <div style={styles.summarySection}>
-          <div style={styles.summaryGrid}>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryValue}>
-                {formatNumber(currentCatchment.totalPopulation)}
-              </div>
-              <div style={styles.summaryLabel}>Total Population</div>
+        {/* Purchase Power Section */}
+        <div style={styles.purchasePowerSection}>
+          <div style={styles.purchasePowerGrid}>
+            <div style={styles.purchasePowerItem}>
+              <span style={styles.purchasePowerLabel}>Purchase Power</span>
+              <span style={styles.purchasePowerValue}>
+                {currentCatchment.totalMIO ? `${currentCatchment.totalMIO} € M` : 'N/A'}
+              </span>
             </div>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryValue}>
-                {formatNumber(currentCatchment.totalHouseHolds)}
-              </div>
-              <div style={styles.summaryLabel}>Households</div>
+            <div style={styles.purchasePowerItem}>
+              <span style={styles.purchasePowerLabel}>Purchase Power / person</span>
+              <span style={styles.purchasePowerValue}>
+                {formatCurrency(currentCatchment.purchasePowerPerson)}
+              </span>
             </div>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryValue}>
+            <div style={styles.purchasePowerItem}>
+              <span style={styles.purchasePowerLabel}>Household Size</span>
+              <span style={styles.purchasePowerValue}>
                 {currentCatchment.householdsMember || 'N/A'}
-              </div>
-              <div style={styles.summaryLabel}>Avg. Household Size</div>
-            </div>
-            <div style={styles.summaryCard}>
-              <div style={styles.summaryValue}>
-                {formatCurrency(currentCatchment.purchasePowerPerson)}
-              </div>
-              <div style={styles.summaryLabel}>Purchase Power/Person</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Economic Information */}
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>💰 Economic Profile</h4>
-          <div style={styles.infoGrid}>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Total Purchase Power:</span>
-              <span style={styles.infoValue}>
-                {currentCatchment.totalMIO ? `€${formatNumber(currentCatchment.totalMIO)}M` : 'N/A'}
               </span>
             </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Purchase Power per Person:</span>
-              <span style={styles.infoValue}>
-                {formatCurrency(currentCatchment.purchasePowerPerson)}
+            <div style={styles.purchasePowerItem}>
+              <span style={styles.purchasePowerLabel}>Households</span>
+              <span style={styles.purchasePowerValue}>
+                {formatNumber(currentCatchment.totalHouseHolds)}
               </span>
             </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Average Household Size:</span>
-              <span style={styles.infoValue}>
-                {currentCatchment.householdsMember || 'N/A'} people
+            <div style={styles.purchasePowerItem}>
+              <span style={styles.purchasePowerLabel}>Population</span>
+              <span style={styles.purchasePowerValue}>
+                {formatNumber(currentCatchment.totalPopulation)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Demographics Charts */}
+        {/* Gender Percentage Section */}
         <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>👥 Demographics</h4>
-          
-          {/* Gender Distribution */}
-          <div style={styles.chartSection}>
-            <h5 style={styles.chartTitle}>Gender Distribution</h5>
-            <div style={styles.chartWrapper}>
-              <Doughnut 
-                data={createGenderChartData(currentCatchment)} 
-                options={doughnutOptions} 
-              />
+          <h4 style={styles.sectionTitle}>Gender percentage:</h4>
+          <div style={styles.legendContainer}>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, backgroundColor: '#6b9bd1'}}></div>
+              <span style={styles.legendLabel}>Men</span>
             </div>
-            <div style={styles.chartStats}>
-              <span>Women: {formatPercentage(currentCatchment.pourcentWomen)}</span>
-              <span>Men: {formatPercentage(currentCatchment.pourcentMan)}</span>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, backgroundColor: '#a87ca8'}}></div>
+              <span style={styles.legendLabel}>Women</span>
             </div>
           </div>
-
-          {/* Age Distribution */}
-          <div style={styles.chartSection}>
-            <h5 style={styles.chartTitle}>Age Distribution</h5>
-            <div style={styles.chartWrapper}>
-              <Bar 
-                data={createAgeChartData(currentCatchment)} 
-                options={chartOptions} 
-              />
-            </div>
-            <div style={styles.ageStats}>
-              <div style={styles.ageStatItem}>
-                <span style={styles.ageLabel}>0-14:</span>
-                <span style={styles.ageValue}>
-                  {formatPercentage(currentCatchment.pourcentAge0014)}
-                </span>
-              </div>
-              <div style={styles.ageStatItem}>
-                <span style={styles.ageLabel}>15-29:</span>
-                <span style={styles.ageValue}>
-                  {formatPercentage(currentCatchment.pourcentAge1529)}
-                </span>
-              </div>
-              <div style={styles.ageStatItem}>
-                <span style={styles.ageLabel}>30-44:</span>
-                <span style={styles.ageValue}>
-                  {formatPercentage(currentCatchment.pourcentAge3044)}
-                </span>
-              </div>
-              <div style={styles.ageStatItem}>
-                <span style={styles.ageLabel}>45-59:</span>
-                <span style={styles.ageValue}>
-                  {formatPercentage(currentCatchment.pourcentAge4559)}
-                </span>
-              </div>
-              <div style={styles.ageStatItem}>
-                <span style={styles.ageLabel}>60+:</span>
-                <span style={styles.ageValue}>
-                  {formatPercentage(currentCatchment.pourcentAge60PL)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Travel Information */}
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>🚗 Travel Information</h4>
-          <div style={styles.infoGrid}>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Drive Time:</span>
-              <span style={styles.infoValue}>
-                {currentCatchment.driveTime || currentCatchment.name}
-              </span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Travel Mode:</span>
-              <span style={styles.infoValue}>
-                {currentCatchment.travelMode || 'Driving'}
-              </span>
-            </div>
-            {currentCatchment.metadata && (
-              <>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>Average Speed:</span>
-                  <span style={styles.infoValue}>
-                    {currentCatchment.metadata.averageSpeed} km/h
-                  </span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>Accessibility Score:</span>
-                  <span style={styles.infoValue}>
-                    {currentCatchment.metadata.accessibility}/100
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Calculation Info */}
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>ℹ️ Calculation Details</h4>
-          <div style={styles.infoGrid}>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Calculated:</span>
-              <span style={styles.infoValue}>
-                {currentCatchment.metadata?.calculatedAt ? 
-                  new Date(currentCatchment.metadata.calculatedAt).toLocaleString() : 
-                  'Just now'
+          <div style={styles.chartWrapper}>
+            <Doughnut 
+              data={createGenderChartData(currentCatchment)} 
+              options={{
+                ...doughnutOptions,
+                plugins: {
+                  ...doughnutOptions.plugins,
+                  legend: {
+                    display: false
+                  }
                 }
-              </span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Method:</span>
-              <span style={styles.infoValue}>Drive Time Analysis</span>
-            </div>
+              }} 
+            />
           </div>
+        </div>
+
+        {/* Population by Age Section */}
+        <div style={styles.section}>
+          <h4 style={styles.sectionTitle}>Population by age:</h4>
+          <div style={styles.chartWrapper}>
+            <Bar 
+              data={{
+                labels: ['0-14', '15-29', '30-44', '45-59', '60+'],
+                datasets: [{
+                  data: [
+                    currentCatchment.pourcentAge0014 || 0,
+                    currentCatchment.pourcentAge1529 || 0,
+                    currentCatchment.pourcentAge3044 || 0,
+                    currentCatchment.pourcentAge4559 || 0,
+                    currentCatchment.pourcentAge60PL || 0
+                  ],
+                  backgroundColor: [
+                    '#CD853F', // Sandy brown for 0-14
+                    '#032842', // CBRE navy for 15-29
+                    '#1ABC9C', // Turquoise for 30-44
+                    '#BDB76B', // Dark khaki for 45-59
+                    '#9370DB'  // Medium purple for 60+
+                  ],
+                  borderWidth: 0,
+                }]
+              }}
+              options={{
+                ...chartOptions,
+                plugins: {
+                  ...chartOptions.plugins,
+                  legend: {
+                    display: false
+                  }
+                },
+                scales: {
+                  ...chartOptions.scales,
+                  y: {
+                    ...chartOptions.scales.y,
+                    max: 25,
+                    ticks: {
+                      ...chartOptions.scales.y.ticks,
+                      stepSize: 5
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer - matching old design */}
+      <div style={styles.footer}>
+        <div style={styles.footerButtons}>
+          <button 
+            className="results-sidebar-excel-btn"
+            onClick={() => onExportCatchmentExcel && onExportCatchmentExcel()}
+            disabled={isGeneratingPDF}
+            style={{
+              ...styles.footerButton,
+              opacity: isGeneratingPDF ? 0.6 : 1
+            }}
+          >
+            <span style={styles.buttonIcon}>📊</span> Export CSV
+          </button>
+          <button 
+            className="results-sidebar-pdf-btn"
+            onClick={onGeneratePDF}
+            disabled={isGeneratingPDF}
+            style={{
+              ...styles.footerButton,
+              opacity: isGeneratingPDF ? 0.6 : 1
+            }}
+          >
+            <span style={styles.buttonIcon}>📄</span> {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
+          </button>
+          {placesData && placesData.length > 0 && (
+            <button
+              className="results-sidebar-excel-btn"
+              onClick={() => onExportPlacesExcel && onExportPlacesExcel()}
+              disabled={isGeneratingPDF}
+              style={{
+                ...styles.footerButton,
+                opacity: isGeneratingPDF ? 0.6 : 1
+              }}
+            >
+              <span style={styles.buttonIcon}>📊</span> Export Places
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -416,151 +379,113 @@ const CatchmentResultsSidebar = ({
 
 const styles = {
   sidebar: {
-    width: '400px',
-    height: '100vh',
+    width: '420px',
+    height: 'calc(100% - 95px)',
     backgroundColor: '#fff',
     display: 'flex',
     flexDirection: 'column',
-    boxShadow: '-2px 0 10px rgba(0, 0, 0, 0.1)',
+    boxShadow: '-2px 0 15px rgba(0,0,0,0.15)',
     zIndex: 1000,
     position: 'fixed',
     right: 0,
-    top: 0,
+    bottom: '15px',
     overflow: 'hidden',
-    fontFamily: 'Arial, sans-serif'
+    fontFamily: 'Calibre, Arial, sans-serif',
+    border: '1px solid #CFD3D4',
+    borderRadius: '12px 0 0 12px'
   },
   header: {
-    padding: '16px 20px',
-    borderBottom: '1px solid #e0e0e0',
+    background: 'linear-gradient(135deg, #032842 0%, #2c5968 100%)',
+    color: 'white',
+    height: '50px',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    borderRadius: '12px 0 0 0',
     display: 'flex',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexDirection: 'column',
-    gap: '12px',
-    backgroundColor: '#f8f9fa'
+    padding: '0 15px'
   },
   headerContent: {
-    flex: 1
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  headerIcon: {
+    height: '13px',
+    width: '13px'
   },
   headerTitle: {
-    margin: '0 0 8px 0',
-    fontSize: '18px',
+    fontSize: '14px',
     fontWeight: 'bold',
-    color: '#333'
-  },
-  locationInfo: {
-    fontSize: '12px',
-    color: '#666',
-    backgroundColor: '#e8f5e8',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    display: 'inline-block'
-  },
-  headerActions: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%'
-  },
-  exportButtons: {
-    display: 'flex',
-    gap: '6px',
-    alignItems: 'center'
-  },
-  pdfButton: {
-    padding: '6px 12px',
-    backgroundColor: '#e74c3c',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '11px',
-    fontWeight: '500',
-    transition: 'all 0.2s ease',
-    whiteSpace: 'nowrap'
-  },
-  excelButton: {
-    padding: '6px 12px',
-    backgroundColor: '#28a745',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '11px',
-    fontWeight: '500',
-    transition: 'all 0.2s ease',
-    whiteSpace: 'nowrap'
+    margin: 0
   },
   closeButton: {
     background: 'none',
     border: 'none',
     fontSize: '16px',
     cursor: 'pointer',
-    color: '#666',
-    padding: '8px',
+    color: 'white',
+    padding: '4px 8px',
     borderRadius: '4px',
-    transition: 'all 0.2s ease',
-    ':hover': {
-      backgroundColor: '#f0f0f0',
-      color: '#333'
-    }
+    transition: 'all 0.2s ease'
   },
   tabsContainer: {
-    borderBottom: '1px solid #e0e0e0',
+    borderBottom: '1px solid #dee2e6',
     backgroundColor: '#f8f9fa'
   },
   tabHeaders: {
     display: 'flex',
-    overflowX: 'auto'
+    overflowX: 'auto',
+    padding: '3px'
   },
   tabButton: {
-    flex: 1,
-    padding: '12px 16px',
-    border: 'none',
-    backgroundColor: 'transparent',
+    background: 'none',
+    border: '1px solid #032842',
+    color: '#032842',
+    margin: '0 3px 3px 0',
+    borderRadius: '0',
+    padding: '8px 16px',
     cursor: 'pointer',
     fontSize: '13px',
     fontWeight: '500',
-    color: '#666',
-    borderBottom: '3px solid transparent',
     transition: 'all 0.2s',
     whiteSpace: 'nowrap',
     minWidth: 'max-content'
   },
   tabButtonActive: {
-    color: '#007bff',
-    backgroundColor: 'white'
+    backgroundColor: '#032842 !important',
+    color: 'white !important',
+    border: '1px solid #032842 !important'
   },
   content: {
     flex: 1,
     overflow: 'auto',
-    padding: '20px'
+    padding: '15px'
   },
-  summarySection: {
-    marginBottom: '25px'
+  purchasePowerSection: {
+    marginBottom: '20px'
   },
-  summaryGrid: {
+  purchasePowerGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '12px'
+    gap: '8px'
   },
-  summaryCard: {
-    padding: '16px',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '8px',
-    textAlign: 'center',
-    border: '1px solid #e9ecef'
+  purchasePowerItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 0',
+    borderBottom: '1px solid #f0f0f0'
   },
-  summaryValue: {
-    fontSize: '20px',
-    fontWeight: 'bold',
-    color: '#007bff',
-    marginBottom: '4px'
+  purchasePowerLabel: {
+    fontSize: '14px',
+    color: '#333',
+    fontWeight: '400'
   },
-  summaryLabel: {
-    fontSize: '11px',
-    color: '#666',
-    fontWeight: '500'
+  purchasePowerValue: {
+    fontSize: '14px',
+    color: '#032842',
+    fontWeight: '600'
   },
   section: {
     marginBottom: '25px'
@@ -569,73 +494,62 @@ const styles = {
     fontSize: '16px',
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: '15px',
-    paddingBottom: '8px',
-    borderBottom: '1px solid #e0e0e0'
+    marginBottom: '15px'
   },
-  infoGrid: {
-    display: 'grid',
-    gap: '10px'
-  },
-  infoItem: {
+  legendContainer: {
     display: 'flex',
-    justifyContent: 'space-between',
+    gap: '15px',
+    marginBottom: '10px',
+    alignItems: 'center'
+  },
+  legendItem: {
+    display: 'flex',
     alignItems: 'center',
-    padding: '8px 0',
-    borderBottom: '1px solid #f0f0f0'
+    gap: '6px'
   },
-  infoLabel: {
-    fontSize: '13px',
-    color: '#666',
-    fontWeight: '500'
+  legendColor: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '2px'
   },
-  infoValue: {
-    fontSize: '13px',
-    color: '#333',
-    fontWeight: '600'
-  },
-  chartSection: {
-    marginBottom: '25px'
-  },
-  chartTitle: {
-    fontSize: '14px',
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: '12px'
-  },
-  chartWrapper: {
-    height: '200px',
-    marginBottom: '12px',
-    position: 'relative'
-  },
-  chartStats: {
-    display: 'flex',
-    justifyContent: 'space-around',
+  legendLabel: {
     fontSize: '12px',
     color: '#666'
   },
-  ageStats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '8px'
+  chartWrapper: {
+    height: '200px',
+    marginBottom: '15px',
+    position: 'relative'
   },
-  ageStatItem: {
+  footer: {
+    borderTop: '1px solid #dee2e6',
+    flexShrink: 0,
+    padding: '15px',
+    textAlign: 'right',
+    position: 'relative'
+  },
+  footerButtons: {
     display: 'flex',
-    flexDirection: 'column',
+    flexWrap: 'wrap',
+    gap: '8px',
+    justifyContent: 'flex-end'
+  },
+  footerButton: {
+    fontSize: '14px',
+    padding: '8px 16px',
+    borderRadius: '6px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease',
+    backgroundColor: '#032842',
+    border: 'none',
+    color: 'white',
+    cursor: 'pointer',
+    display: 'flex',
     alignItems: 'center',
-    padding: '8px',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '4px'
+    gap: '6px'
   },
-  ageLabel: {
-    fontSize: '11px',
-    color: '#666',
-    fontWeight: '500'
-  },
-  ageValue: {
-    fontSize: '13px',
-    color: '#333',
-    fontWeight: 'bold'
+  buttonIcon: {
+    fontSize: '12px'
   }
 };
 

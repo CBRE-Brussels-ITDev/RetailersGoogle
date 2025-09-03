@@ -207,31 +207,36 @@ function App() {
     setIsLoading(true);
     try {
       console.log('Calculating catchment with params:', params);
-      console.log('FRONTEND: Sending catchment request to server...');
-      
-      const response = await GooglePlacesService.calculateCatchment(
+      console.log('FRONTEND: Sending ArcGIS catchment request to server...');
+
+      // Map frontend travel modes to ArcGIS travel modes
+      const travelModeMapping = {
+        'driving': 'Driving Time',
+        'walking': 'Walking Time'
+      };
+      const arcgisTravelMode = travelModeMapping[params.travelMode] || 'Driving Time';
+      console.log('Mapped travel mode:', params.travelMode, '->', arcgisTravelMode);
+
+      // Call ArcGIS catchment function instead of legacy
+      const arcgisResponse = await GooglePlacesService.getArcgisCatchment(
         selectedLocation,
-        params.travelMode,
         params.driveTimes,
-        params.showDemographics,
-        params.colors // Pass the colors from the color picker
+        arcgisTravelMode
       );
-      
-      console.log('FRONTEND: Catchment calculation response:', response);
-      console.log('FRONTEND: Setting catchmentData to:', response.catchmentResults);
-      console.log('FRONTEND: Using colors for map rendering:', params.colors);
-      
-      setCatchmentData(response.catchmentResults || []);
-      setShowCatchmentResults(true);
-      
-      // Add catchment polygons to map with colors
-      if (mapRef.current && response.catchmentResults && response.catchmentResults.length > 0) {
-        console.log('Adding catchment polygons to map with colors:', params.colors);
-        mapRef.current.addCatchmentPolygons(response.catchmentResults, params.colors);
+      console.log('ArcGIS catchment response:', arcgisResponse);
+
+      // Set polygons to state and map
+      if (arcgisResponse.polygons && arcgisResponse.polygons.length > 0) {
+        setCatchmentData(arcgisResponse.polygons);
+        setShowCatchmentResults(true);
+        if (mapRef.current) {
+          mapRef.current.addCatchmentPolygons(arcgisResponse.polygons, params.colors);
+        }
+      } else {
+        alert('No catchment polygons returned from ArcGIS.');
       }
-      
     } catch (error) {
-      console.error('Error calculating catchment:', error);
+      console.error('Error calculating ArcGIS catchment:', error);
       alert('Error calculating catchment. Please try again.');
     } finally {
       setIsLoading(false);
