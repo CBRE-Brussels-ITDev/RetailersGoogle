@@ -27,6 +27,10 @@ const CatchmentResultsSidebar = ({
 
   const formatCurrency = (num) => {
     if (num === undefined || num === null) return 'N/A';
+    // If it's already a formatted string (contains dots), return with € prefix
+    if (typeof num === 'string' && num.includes('.')) {
+      return `€${num}`;
+    }
     return new Intl.NumberFormat('en-US', { 
       style: 'currency', 
       currency: 'EUR',
