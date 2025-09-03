@@ -246,25 +246,64 @@ async function calculateWeightedDemographics(sectors, catchmentGeometry, breakTi
     let totalPP_MIO = 0;
     
     try {
+        console.log(`Processing ${sectors.length} sectors for ${breakTime}min catchment...`);
+        
         // For each sector, calculate intersection percentage and apply to demographic values
         for (const sector of sectors) {
             const attributes = sector.attributes;
             
-            // For simplicity, assume full sector coverage if intersection is detected
-            // In a real implementation, you'd calculate exact intersection areas like the old tool
-            const coveragePercentage = 1.0; // This would be calculated using geometry intersection
+            // Calculate intersection area percentage (like the old tool does)
+            let coveragePercentage = 1.0; // Default to full coverage
             
-            // Add weighted demographic values
-            totalMale += (attributes.MALE || 0) * coveragePercentage;
-            totalFemale += (attributes.FEMALE || 0) * coveragePercentage;
-            totalAGE0014 += (attributes.AGE_T0014 || 0) * coveragePercentage;
-            totalAGE1529 += (attributes.AGE_T1529 || 0) * coveragePercentage;
-            totalAGE3044 += (attributes.AGE_T3044 || 0) * coveragePercentage;
-            totalAGE4559 += (attributes.AGE_T4559 || 0) * coveragePercentage;
-            totalAGE60PL += (attributes.AGE_T60PL || 0) * coveragePercentage;
-            totalHH_T += (attributes.HH_T || 0) * coveragePercentage;
-            totalPP_MIO += (attributes.PP_MIO || 0) * coveragePercentage;
+            if (sector.geometry && sector.geometry.rings && catchmentGeometry.rings) {
+                try {
+                    // Calculate intersection area using basic area comparison
+                    // This is a simplified version - the old tool uses ArcGIS geometryEngineAsync.intersect()
+                    const sectorArea = calculatePolygonArea(sector.geometry);
+                    const catchmentArea = calculatePolygonArea(catchmentGeometry);
+                    
+                    // For sectors much smaller than catchment, assume full coverage
+                    // For sectors much larger than catchment, assume partial coverage
+                    if (sectorArea <= catchmentArea * 0.1) {
+                        coveragePercentage = 1.0; // Small sector, likely fully covered
+                    } else if (sectorArea >= catchmentArea * 10) {
+                        coveragePercentage = 0.1; // Large sector, likely small intersection
+                    } else {
+                        // Medium-sized sector, estimate based on relative sizes
+                        coveragePercentage = Math.min(1.0, catchmentArea / sectorArea);
+                    }
+                } catch (geoError) {
+                    console.warn('Geometry calculation error, using default coverage:', geoError.message);
+                    coveragePercentage = 0.5; // Conservative estimate
+                }
+            }
+            
+            // Apply coverage percentage to demographic values (like the old tool)
+            const weightedMale = (attributes.MALE || 0) * coveragePercentage;
+            const weightedFemale = (attributes.FEMALE || 0) * coveragePercentage;
+            const weightedAGE0014 = (attributes.AGE_T0014 || 0) * coveragePercentage;
+            const weightedAGE1529 = (attributes.AGE_T1529 || 0) * coveragePercentage;
+            const weightedAGE3044 = (attributes.AGE_T3044 || 0) * coveragePercentage;
+            const weightedAGE4559 = (attributes.AGE_T4559 || 0) * coveragePercentage;
+            const weightedAGE60PL = (attributes.AGE_T60PL || 0) * coveragePercentage;
+            const weightedHH_T = (attributes.HH_T || 0) * coveragePercentage;
+            const weightedPP_MIO = (attributes.PP_MIO || 0) * coveragePercentage;
+            
+            // Add weighted values to totals
+            totalMale += weightedMale;
+            totalFemale += weightedFemale;
+            totalAGE0014 += weightedAGE0014;
+            totalAGE1529 += weightedAGE1529;
+            totalAGE3044 += weightedAGE3044;
+            totalAGE4559 += weightedAGE4559;
+            totalAGE60PL += weightedAGE60PL;
+            totalHH_T += weightedHH_T;
+            totalPP_MIO += weightedPP_MIO;
+            
+            console.log(`Sector ${attributes.NAME || 'Unknown'}: ${(coveragePercentage * 100).toFixed(1)}% coverage, Pop: ${(weightedMale + weightedFemale).toFixed(0)}`);
         }
+        
+        console.log(`Total weighted population: ${Math.round(totalMale + totalFemale)}, PP: ${totalPP_MIO.toFixed(2)}M€`);
         
         // Calculate derived values (like the old tool)
         const totalPopulation = Math.round(totalMale + totalFemale);
@@ -308,6 +347,34 @@ async function calculateWeightedDemographics(sectors, catchmentGeometry, breakTi
     } catch (error) {
         console.error('Error calculating weighted demographics:', error);
         return getDefaultDemographics(breakTime);
+    }
+}
+
+// Helper function to calculate approximate polygon area (simplified version)
+function calculatePolygonArea(geometry) {
+    if (!geometry || !geometry.rings || !Array.isArray(geometry.rings) || geometry.rings.length === 0) {
+        return 0;
+    }
+    
+    try {
+        // Use the first ring (outer boundary)
+        const ring = geometry.rings[0];
+        if (!ring || ring.length < 3) return 0;
+        
+        // Simple area calculation using shoelace formula
+        let area = 0;
+        const n = ring.length;
+        
+        for (let i = 0; i < n - 1; i++) {
+            const j = (i + 1) % n;
+            area += ring[i][0] * ring[j][1];
+            area -= ring[j][0] * ring[i][1];
+        }
+        
+        return Math.abs(area) / 2;
+    } catch (error) {
+        console.warn('Error calculating polygon area:', error.message);
+        return 1; // Return default area if calculation fails
     }
 }
 
