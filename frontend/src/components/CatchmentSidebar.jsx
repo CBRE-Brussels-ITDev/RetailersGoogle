@@ -373,15 +373,6 @@ const radiusOptions = [
             </div>
           )}
 
-          {/* Clear Button - Only show if there's data to clear */}
-          {(catchmentData?.length > 0 || selectedLocation) && (
-            <button
-              onClick={onClearAll}
-              style={styles.clearButton}
-            >
-              🗑️ Clear All
-            </button>
-          )}
         </div>
       ) : (
         // PLACES MODE - ENHANCED USER INTERFACE

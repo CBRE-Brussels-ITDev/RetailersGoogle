@@ -1,7 +1,7 @@
 import { useImperativeHandle, forwardRef, useRef, useEffect, useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 
-const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData }, ref) => {
+const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData, onClearAll }, ref) => {
   const mapDiv = useRef(null);
   const mapView = useRef(null);
   const graphicsLayer = useRef(null);
@@ -748,122 +748,168 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         padding: 0
       }}
     >
-      {/* Basemap Gallery - matching old tool design */}
+      {/* Map Controls - Basemap Gallery and Clear All Button */}
       <div style={{
         position: 'absolute',
         top: '20px',
         right: '20px',
         zIndex: 1500,
-        backgroundColor: 'rgba(252, 252, 252, 0.9)',
-        borderRadius: '8px',
-        padding: showBasemapGallery ? '15px' : '8px',
-        width: showBasemapGallery ? '280px' : '30px',
-        height: showBasemapGallery ? 'auto' : '25px',
-        transition: 'all 0.3s ease',
-        overflow: 'hidden',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        backdropFilter: 'blur(10px)'
+        display: 'flex',
+        gap: '10px',
+        alignItems: 'flex-start'
       }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: showBasemapGallery ? 'space-between' : 'center',
-          marginBottom: showBasemapGallery ? '12px' : '0',
-          whiteSpace: 'nowrap',
-          height: showBasemapGallery ? 'auto' : '24px'
-        }}>
-          {showBasemapGallery && (
-            <h5 style={{
-              margin: 0,
-              color: '#333',
-              fontSize: '13px',
-              fontWeight: '600'
-            }}>
-              Basemap options:
-            </h5>
-          )}
+        {/* Clear All Button */}
+        {onClearAll && (selectedLocation || searchResultsData?.length > 0) && (
           <button
-            onClick={() => setShowBasemapGallery(!showBasemapGallery)}
+            onClick={onClearAll}
             style={{
-              background: 'none',
+              backgroundColor: 'rgba(243, 156, 18, 0.9)',
+              color: 'white',
               border: 'none',
-              color: '#666',
-              fontSize: showBasemapGallery ? '14px' : '12px',
+              borderRadius: '8px',
+              padding: showBasemapGallery ? '10px 16px' : '12px',
+              fontSize: showBasemapGallery ? '14px' : '16px',
+              fontWeight: '500',
               cursor: 'pointer',
-              padding: '4px',
-              borderRadius: '4px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              backdropFilter: 'blur(10px)',
               transition: 'all 0.2s ease',
-              opacity: 0.7
+              opacity: 0.9,
+              width: showBasemapGallery ? 'auto' : '50px',
+              height: showBasemapGallery ? 'auto' : '42px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: '45px'
             }}
             onMouseEnter={(e) => {
-              e.target.style.backgroundColor = 'rgba(0,0,0,0.1)';
+              e.target.style.backgroundColor = 'rgba(243, 156, 18, 1)';
               e.target.style.opacity = '1';
+              e.target.style.transform = 'translateY(-1px)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.backgroundColor = 'transparent';
-              e.target.style.opacity = '0.7';
+              e.target.style.backgroundColor = 'rgba(243, 156, 18, 0.9)';
+              e.target.style.opacity = '0.9';
+              e.target.style.transform = 'translateY(0)';
             }}
-            title="Change basemap"
+            title="Clear all data and selections"
           >
-            {showBasemapGallery ? '✕' : '🗺️'}
+            {showBasemapGallery ? '🗑️ Clear' : '🗑️'}
           </button>
-        </div>
-
-        {showBasemapGallery && (
+        )}
+        {/* Basemap Gallery */}
+        <div style={{
+          backgroundColor: 'rgba(252, 252, 252, 0.9)',
+          borderRadius: '8px',
+          padding: showBasemapGallery ? '15px' : '8px',
+          width: showBasemapGallery ? '280px' : '30px',
+          height: showBasemapGallery ? 'auto' : '25px',
+          transition: 'all 0.3s ease',
+          overflow: 'hidden',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          backdropFilter: 'blur(10px)'
+        }}>
           <div style={{
             display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
+            alignItems: 'center',
+            justifyContent: showBasemapGallery ? 'space-between' : 'center',
+            marginBottom: showBasemapGallery ? '12px' : '0',
+            whiteSpace: 'nowrap',
+            height: showBasemapGallery ? 'auto' : '24px'
           }}>
-            {basemapOptions.map(basemap => (
-              <div key={basemap.id} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
+            {showBasemapGallery && (
+              <h5 style={{
+                margin: 0,
+                color: '#333',
+                fontSize: '13px',
+                fontWeight: '600'
+              }}>
+                Basemap options:
+              </h5>
+            )}
+            <button
+              onClick={() => setShowBasemapGallery(!showBasemapGallery)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#666',
+                fontSize: showBasemapGallery ? '14px' : '12px',
                 cursor: 'pointer',
-                padding: '6px',
-                borderRadius: '6px',
-                backgroundColor: currentBasemap === basemap.id ? 'rgba(0, 123, 255, 0.1)' : 'transparent',
-                border: currentBasemap === basemap.id ? '1px solid #007bff' : '1px solid transparent',
-                transition: 'all 0.2s ease'
+                padding: '4px',
+                borderRadius: '4px',
+                transition: 'all 0.2s ease',
+                opacity: 0.7
               }}
-              onClick={() => changeBasemap(basemap.id)}
               onMouseEnter={(e) => {
-                if (currentBasemap !== basemap.id) {
-                  e.target.style.backgroundColor = 'rgba(0,0,0,0.05)';
-                }
+                e.target.style.backgroundColor = 'rgba(0,0,0,0.1)';
+                e.target.style.opacity = '1';
               }}
               onMouseLeave={(e) => {
-                if (currentBasemap !== basemap.id) {
-                  e.target.style.backgroundColor = 'transparent';
-                }
+                e.target.style.backgroundColor = 'transparent';
+                e.target.style.opacity = '0.7';
               }}
-              >
-                <img
-                  src={basemap.thumbnail}
-                  alt={basemap.name}
-                  style={{
-                    width: '70px',
-                    height: '50px',
-                    border: '1px solid #ddd',
-                    borderRadius: '3px',
-                    objectFit: 'cover'
-                  }}
-                />
-                <label style={{
-                  color: '#333',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  textWrap: 'wrap',
-                  lineHeight: '1.3'
-                }}>
-                  {basemap.name}
-                </label>
-              </div>
-            ))}
+              title="Change basemap"
+            >
+              {showBasemapGallery ? '✕' : '🗺️'}
+            </button>
           </div>
-        )}
+
+          {showBasemapGallery && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              {basemapOptions.map(basemap => (
+                <div key={basemap.id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  backgroundColor: currentBasemap === basemap.id ? 'rgba(0, 123, 255, 0.1)' : 'transparent',
+                  border: currentBasemap === basemap.id ? '1px solid #007bff' : '1px solid transparent',
+                  transition: 'all 0.2s ease'
+                }}
+                onClick={() => changeBasemap(basemap.id)}
+                onMouseEnter={(e) => {
+                  if (currentBasemap !== basemap.id) {
+                    e.target.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentBasemap !== basemap.id) {
+                    e.target.style.backgroundColor = 'transparent';
+                  }
+                }}
+                >
+                  <img
+                    src={basemap.thumbnail}
+                    alt={basemap.name}
+                    style={{
+                      width: '70px',
+                      height: '50px',
+                      border: '1px solid #ddd',
+                      borderRadius: '3px',
+                      objectFit: 'cover'
+                    }}
+                  />
+                  <label style={{
+                    color: '#333',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    textWrap: 'wrap',
+                    lineHeight: '1.3'
+                  }}>
+                    {basemap.name}
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

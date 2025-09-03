@@ -648,6 +648,7 @@ function App() {
           searchResults={searchResults}
           searchResultsData={searchResultsData}
           catchmentData={catchmentData}
+          onClearAll={clearSearch}
           style={{ width: '100%', height: '100%' }}
         />
 
