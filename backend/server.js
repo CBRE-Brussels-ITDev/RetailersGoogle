@@ -15,6 +15,149 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Move API key to environment variable for security
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyA1r8V5FSaYFvmS8FwnGxA6DwXhnHUvHUc";
 // Fixed ArcGIS Service Area API integration endpoint - using the same approach as the old working tool
+// NEW: Single catchment calculation endpoint (for independent calls)
+app.post('/arcgis-single-catchment', async (req, res) => {
+    const { center, breakTime, travelMode = 'Driving Time' } = req.body;
+    const ESRI_API_KEY = process.env.ESRI_API_KEY;
+
+    if (!ESRI_API_KEY) {
+        return res.status(500).json({ error: 'ESRI API key not configured' });
+    }
+
+    if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number' || !breakTime) {
+        return res.status(400).json({ error: 'center (lat, lng) and breakTime are required' });
+    }
+
+    try {
+        console.log(`\n🎯 SINGLE CATCHMENT API - ${breakTime} minutes at [${center.lat}, ${center.lng}]`);
+
+        // Get the supported travel modes from the network service
+        const networkServiceUrl = 'https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World';
+        const serviceDescResponse = await axios.get(networkServiceUrl, {
+            params: {
+                f: 'json',
+                token: ESRI_API_KEY
+            }
+        });
+
+        const { supportedTravelModes } = serviceDescResponse.data;
+        const selectedTravelMode = supportedTravelModes.find(mode => mode.name === travelMode);
+        
+        if (!selectedTravelMode) {
+            return res.status(400).json({ 
+                error: 'Invalid travel mode', 
+                available: supportedTravelModes.map(m => m.name)
+            });
+        }
+
+        // Validate break time
+        const validatedBreakTime = parseInt(breakTime, 10);
+        if (isNaN(validatedBreakTime) || validatedBreakTime <= 0) {
+            return res.status(400).json({ error: 'Break time must be a positive number' });
+        }
+
+        console.log(`🚗 Using travel mode: ${selectedTravelMode.name}`);
+        console.log(`⏰ Break time: ${validatedBreakTime} minutes`);
+
+        // Use ServiceArea service URL
+        const serviceAreaUrl = 'https://route-api.arcgis.com/arcgis/rest/services/World/ServiceAreas/NAServer/ServiceArea_World/solveServiceArea';
+        
+        // Create facilities
+        const facilities = {
+            features: [{
+                geometry: { 
+                    x: center.lng, 
+                    y: center.lat 
+                },
+                attributes: { Name: 'Center' }
+            }],
+            spatialReference: { wkid: 4326 }
+        };
+
+        // Parameters for SINGLE catchment calculation
+        const params = {
+            f: 'json',
+            facilities: JSON.stringify(facilities),
+            defaultBreaks: validatedBreakTime.toString(), // SINGLE break time only
+            travelMode: JSON.stringify(selectedTravelMode),
+            trimOuterPolygon: true, // Can use trim for single catchment
+            outSpatialReference: JSON.stringify({ wkid: 4326 }),
+            token: ESRI_API_KEY
+        };
+
+        console.log(`📡 Making SINGLE catchment API call for ${validatedBreakTime} minutes...`);
+        const response = await axios.post(serviceAreaUrl, new URLSearchParams(params), {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            timeout: 30000
+        });
+
+        if (response.data && response.data.saPolygons && response.data.saPolygons.features && response.data.saPolygons.features.length > 0) {
+            const polygon = response.data.saPolygons.features[0]; // Should be only one polygon
+            const rings = polygon.geometry.rings;
+            const coordinates = rings.map(ring => ring.map(coord => [coord[0], coord[1]]));
+            
+            console.log(`✅ Got single catchment polygon with ${rings.length} rings`);
+            
+            // Get real demographic data
+            const demographics = await getRealDemographicData(polygon.geometry, validatedBreakTime);
+            
+            console.log(`🎯 Single ${validatedBreakTime}min catchment - Final demographics:`, {
+                population: demographics.totalPopulation,
+                households: demographics.totalHouseHolds,
+                purchasePower: demographics.totalMIO,
+                ppPerPerson: demographics.purchasePowerPerson
+            });
+            
+            const catchmentData = {
+                id: 0,
+                breakTime: validatedBreakTime,
+                name: `${validatedBreakTime} minutes`,
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: coordinates
+                },
+                attributes: polygon.attributes,
+                // Demographic data
+                totalPopulation: demographics.totalPopulation,
+                totalHouseHolds: demographics.totalHouseHolds,
+                householdsMember: demographics.householdsMember,
+                purchasePowerPerson: demographics.purchasePowerPerson,
+                totalMIO: demographics.totalMIO,
+                // Gender data
+                pourcentWomen: demographics.pourcentWomen,
+                pourcentMan: demographics.pourcentMan,
+                // Age data
+                pourcentAge0014: demographics.pourcentAge0014,
+                pourcentAge1529: demographics.pourcentAge1529,
+                pourcentAge3044: demographics.pourcentAge3044,
+                pourcentAge4559: demographics.pourcentAge4559,
+                pourcentAge60PL: demographics.pourcentAge60PL,
+                demographics: demographics
+            };
+            
+            return res.json({ 
+                success: true,
+                catchment: catchmentData,
+                travelMode: selectedTravelMode.name
+            });
+        } else {
+            console.error('❌ No polygons in single catchment response');
+            return res.status(400).json({ 
+                error: 'No polygons returned from ArcGIS for single catchment'
+            });
+        }
+
+    } catch (error) {
+        console.error('❌ Single catchment error:', error.message);
+        return res.status(500).json({ 
+            error: 'Failed to calculate single catchment area',
+            details: error.response?.data || error.message
+        });
+    }
+});
+
 app.post('/arcgis-catchment', async (req, res) => {
     const { center, breakTimes, travelMode = 'Driving Time' } = req.body;
     const ESRI_API_KEY = process.env.ESRI_API_KEY;
@@ -87,7 +230,9 @@ app.post('/arcgis-catchment', async (req, res) => {
             facilities: JSON.stringify(facilities),
             defaultBreaks: validatedBreakTimes.join(' '),
             travelMode: JSON.stringify(selectedTravelMode), // Use the full travel mode object from network service
-            trimOuterPolygon: true, // This is key from the old tool
+            trimOuterPolygon: false, // Changed to false to get complete nested polygons
+            mergeSimilarPolygonRanges: false, // Ensure each break time gets its own polygon
+            overlapPolygons: true, // Allow polygons to overlap (nested structure)
             outSpatialReference: JSON.stringify({ wkid: 4326 }),
             token: ESRI_API_KEY
         };
@@ -106,14 +251,35 @@ app.post('/arcgis-catchment', async (req, res) => {
         // Check for service area polygons in the response
         if (response.data && response.data.saPolygons && response.data.saPolygons.features) {
             // Process each catchment polygon and get real demographic data
+            // IMPORTANT: Each catchment must be calculated independently with its FULL area
+            // Not just the ring between this and smaller catchments
             const polygonsWithDemographics = await Promise.all(
                 response.data.saPolygons.features.map(async (f, index) => {
                     const rings = f.geometry.rings;
                     const coordinates = rings.map(ring => ring.map(coord => [coord[0], coord[1]]));
                     const breakTime = f.attributes.ToBreak;
                     
+                    console.log(`\n=== PROCESSING CATCHMENT ${index + 1}/${response.data.saPolygons.features.length} (${breakTime} minutes) ===`);
+                    console.log(`Catchment ${breakTime}min polygon has ${rings.length} rings`);
+                    console.log(`First ring has ${rings[0] ? rings[0].length : 0} points`);
+                    
+                    // CRITICAL: Use the complete polygon geometry as received from ArcGIS
+                    // This should be the FULL catchment area, not just a ring
+                    const fullCatchmentGeometry = {
+                        rings: f.geometry.rings,
+                        spatialReference: f.geometry.spatialReference || { wkid: 4326 }
+                    };
+                    
                     // Get real demographic data by intersecting with CBRE feature layers
-                    const demographics = await getRealDemographicData(f.geometry, breakTime);
+                    // Each catchment gets its own independent API call and calculation
+                    const demographics = await getRealDemographicData(fullCatchmentGeometry, breakTime);
+                    
+                    console.log(`Catchment ${breakTime}min - Final demographics:`, {
+                        population: demographics.totalPopulation,
+                        households: demographics.totalHouseHolds,
+                        purchasePower: demographics.totalMIO,
+                        ppPerPerson: demographics.purchasePowerPerson
+                    });
                     
                     return {
                         id: index,
@@ -181,11 +347,14 @@ app.post('/arcgis-catchment', async (req, res) => {
 
 // Query real demographic data from CBRE ArcGIS Feature Layers (like the old tool)
 async function getRealDemographicData(polygonGeometry, breakTime) {
-    console.log(`Retrieving REAL layer-based demographics for ${breakTime} minute catchment...`);
+    const calculationId = `${breakTime}min_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`\n🔍 [${calculationId}] Retrieving REAL layer-based demographics for ${breakTime} minute catchment...`);
     
     try {
         // Initialize accumulator for sector data (exactly matching old tool structure)
+        // Each call gets its own fresh accumulator - no shared state
         const currentCatchment = {
+            id: calculationId,
             number: breakTime,
             totalMale: 0,
             totalFemale: 0,
@@ -211,11 +380,13 @@ async function getRealDemographicData(polygonGeometry, breakTime) {
         const sectorCoverageData = [];
         
         // Get demographic layer features (CBRE demographic sectors)
+        // Each catchment makes its own independent API call
+        console.log(`📡 [${calculationId}] Making independent API call to CBRE Belgium layer...`);
         const featureSet = await getDemographicLayerFeatures(polygonGeometry);
-        console.log(`Found ${featureSet.features.length} demographic sectors intersecting catchment`);
+        console.log(`📊 [${calculationId}] Found ${featureSet.features.length} demographic sectors intersecting catchment`);
         
         if (!featureSet.features || featureSet.features.length === 0) {
-            console.warn('No demographic layer features found, falling back to estimation');
+            console.warn(`⚠️ [${calculationId}] No demographic layer features found, falling back to estimation`);
             return getDefaultDemographics(breakTime);
         }
         
@@ -228,7 +399,7 @@ async function getRealDemographicData(polygonGeometry, breakTime) {
                 const intersectGeometry = await calculateGeometricIntersection(obj.geometry, polygonGeometry);
                 
                 if (!intersectGeometry) {
-                    console.log(`No intersection for sector ${index}, skipping...`);
+                    console.log(`🚫 [${calculationId}] No intersection for sector ${index}, skipping...`);
                     continue;
                 }
                 
@@ -237,11 +408,12 @@ async function getRealDemographicData(polygonGeometry, breakTime) {
                 const shapeAreaIntersection = await calculatePlanarArea(intersectGeometry);
                 const coveragePercentage = await getPourcentageIntersection(shapeAreaIntersection, shapeAreaSector);
                 
-                console.log(`Sector ${index}: ${coveragePercentage.toFixed(2)}% coverage`);
+                console.log(`✅ [${calculationId}] Sector ${index}: ${coveragePercentage.toFixed(2)}% coverage`);
                 
                 // Store detailed sector coverage data (matching old tool structure)
                 const sectorData = {
                     catchmentMinutes: breakTime,
+                    calculationId: calculationId,
                     sectorId: obj.attributes.id || obj.attributes.ID || obj.attributes.objectid || `SECTOR_${index}`,
                     sectorName: obj.attributes.name || obj.attributes.NAME || obj.attributes.namefre || obj.attributes.namedut || `Sector_${index}`,
                     coveragePercentage: coveragePercentage,
@@ -271,7 +443,7 @@ async function getRealDemographicData(polygonGeometry, breakTime) {
                 };
                 sectorCoverageData.push(sectorData);
                 
-                console.log(`Sector ${index} data:`, {
+                console.log(`📊 [${calculationId}] Sector ${index} data:`, {
                     name: sectorData.sectorName,
                     coverage: `${coveragePercentage.toFixed(2)}%`,
                     pop: sectorData.population,
@@ -279,11 +451,11 @@ async function getRealDemographicData(polygonGeometry, breakTime) {
                     households: sectorData.households
                 });
                 
-                console.log(`RAW ATTRIBUTES for Sector ${index}:`, obj.attributes);
-                console.log(`Available fields:`, Object.keys(obj.attributes));
+                console.log(`🔍 [${calculationId}] RAW ATTRIBUTES for Sector ${index}:`, obj.attributes);
+                console.log(`📝 [${calculationId}] Available fields:`, Object.keys(obj.attributes));
                 
                 // Add sector contribution to catchment totals (exactly like old tool)
-                console.log(`\n--- SECTOR ${index} ADDITION DEBUG ---`);
+                console.log(`\n--- [${calculationId}] SECTOR ${index} ADDITION DEBUG ---`);
                 console.log(`Available attributes:`, Object.keys(obj.attributes));
                 console.log(`Sample attribute values:`, {
                     male: obj.attributes.male,
@@ -297,26 +469,28 @@ async function getRealDemographicData(polygonGeometry, breakTime) {
                     HH_T: obj.attributes.HH_T
                 });
                 addSectorToCatchment(obj.attributes, coveragePercentage, currentCatchment);
-                console.log(`--- END SECTOR ${index} ADDITION ---\n`);
+                console.log(`--- [${calculationId}] END SECTOR ${index} ADDITION ---\n`);
                 
             } catch (sectorError) {
-                console.error(`Error processing sector ${index}:`, sectorError.message);
+                console.error(`❌ [${calculationId}] Error processing sector ${index}:`, sectorError.message);
                 continue;
             }
         }
         
         // Generate final catchment demographics (matching old tool's getGlobalsVariables)
+        console.log(`🧮 [${calculationId}] Generating final demographics from ${currentCatchment.intersectedSectors.length} sectors...`);
         const finalDemographics = getGlobalsVariables(currentCatchment);
         
         // Add detailed sector analysis
         finalDemographics.sectorAnalysis = {
+            calculationId: calculationId,
             sectorsAnalyzed: featureSet.features.length,
             sectorsIntersected: sectorCoverageData.length,
             sectorCoverageData: sectorCoverageData,
             calculationMethod: 'layer-based-intersection'
         };
         
-        console.log(`Layer-based calculation complete - Pop: ${finalDemographics.totalPopulation.toLocaleString()}, Sectors: ${sectorCoverageData.length}`);
+        console.log(`✅ [${calculationId}] Layer-based calculation complete - Pop: ${finalDemographics.totalPopulation.toLocaleString()}, Sectors: ${sectorCoverageData.length}`);
         
         return finalDemographics;
         
@@ -399,23 +573,30 @@ async function getDemographicLayerFeatures(polygonGeometry) {
         const queryUrl = `${layerUrl}/query`;
         
         // Prepare the geometry for the query (ensure it's in the right format)
+        // Create a unique copy of the geometry to avoid any reference sharing
         const geometryForQuery = {
-            rings: polygonGeometry.rings,
+            rings: JSON.parse(JSON.stringify(polygonGeometry.rings)), // Deep copy
             spatialReference: { wkid: 4326 }
         };
+        
+        // Add a small buffer to ensure we get all sectors that might be at the edge
+        // This prevents issues where sectors might be missed in multi-catchment scenarios
+        const geometryString = JSON.stringify(geometryForQuery);
         
         // POST request body to avoid URI length limits
         const requestBody = new URLSearchParams({
             f: 'json',
             where: '1=1', // Get all features that intersect
             outFields: '*', // Get all fields from the layer
-            geometry: JSON.stringify(geometryForQuery),
+            geometry: geometryString,
             geometryType: 'esriGeometryPolygon',
             spatialRel: 'esriSpatialRelIntersects',
             inSR: '4326',
             outSR: '4326',
             returnGeometry: 'true',
-            maxRecordCount: 2000 // Ensure we get all intersecting sectors
+            maxRecordCount: 2000, // Ensure we get all intersecting sectors
+            // Add unique timestamp to prevent any caching issues
+            _ts: Date.now()
         });
         
         console.log('Querying demographic layer with POST request...');

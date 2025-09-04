@@ -6,7 +6,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'https://coral-app-adar7.ondigi
 const GooglePlacesService = {
     // Existing methods...
 
-    // ArcGIS catchment calculation (drive-time polygons)
+    // ArcGIS catchment calculation (drive-time polygons) - MULTIPLE catchments in one call
     async getArcgisCatchment(center, breakTimes, travelMode = 'Driving Time') {
         // Always send travelMode as a valid ArcGIS travel mode name
         const validModes = [
@@ -25,6 +25,57 @@ const GooglePlacesService = {
             return response.data;
         } catch (error) {
             console.error('Error fetching ArcGIS catchment:', error);
+            throw error;
+        }
+    },
+
+    // NEW: ArcGIS single catchment calculation - ONE catchment per call (more accurate)
+    async getArcgisSingleCatchment(center, breakTime, travelMode = 'Driving Time') {
+        const validModes = ["Driving Time", "Walking Time"];
+        let modeToSend = validModes.includes(travelMode) ? travelMode : 'Driving Time';
+        console.log(`🎯 Requesting SINGLE ArcGIS catchment: ${breakTime} minutes`, { center, travelMode: modeToSend });
+        
+        try {
+            const response = await axios.post(`${BASE_URL}/arcgis-single-catchment`, {
+                center, 
+                breakTime,
+                travelMode: modeToSend
+            });
+            console.log(`✅ Single catchment response for ${breakTime} minutes:`, response.data);
+            return response.data;
+        } catch (error) {
+            console.error(`❌ Error fetching single catchment for ${breakTime} minutes:`, error);
+            throw error;
+        }
+    },
+
+    // NEW: Multiple independent catchment calls (most accurate method)
+    async getMultipleIndependentCatchments(center, breakTimes, travelMode = 'Driving Time') {
+        console.log(`🎯 Making ${breakTimes.length} INDEPENDENT catchment calls:`, { center, breakTimes, travelMode });
+        
+        try {
+            // Make separate API calls for each break time
+            const catchmentPromises = breakTimes.map(breakTime => 
+                this.getArcgisSingleCatchment(center, breakTime, travelMode)
+            );
+            
+            // Wait for all calls to complete
+            const results = await Promise.all(catchmentPromises);
+            
+            // Extract catchment data and combine
+            const polygons = results.map(result => result.catchment);
+            
+            console.log(`✅ Got ${polygons.length} independent catchments:`, 
+                polygons.map(p => `${p.breakTime}min: ${p.totalPopulation} pop, ${p.totalMIO} PP`)
+            );
+            
+            return {
+                success: true,
+                polygons: polygons,
+                travelMode: travelMode
+            };
+        } catch (error) {
+            console.error('❌ Error in multiple independent catchments:', error);
             throw error;
         }
     },

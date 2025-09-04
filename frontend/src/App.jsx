@@ -217,13 +217,14 @@ function App() {
       const arcgisTravelMode = travelModeMapping[params.travelMode] || 'Driving Time';
       console.log('Mapped travel mode:', params.travelMode, '->', arcgisTravelMode);
 
-      // Call ArcGIS catchment function instead of legacy
-      const arcgisResponse = await GooglePlacesService.getArcgisCatchment(
+      // Call INDEPENDENT ArcGIS catchment functions for accurate results
+      console.log('🎯 Using INDEPENDENT catchment calls to prevent polygon interference');
+      const arcgisResponse = await GooglePlacesService.getMultipleIndependentCatchments(
         selectedLocation,
         params.driveTimes,
         arcgisTravelMode
       );
-      console.log('ArcGIS catchment response:', arcgisResponse);
+      console.log('✅ Independent ArcGIS catchment response:', arcgisResponse);
 
       // Set polygons to state and map
       if (arcgisResponse.polygons && arcgisResponse.polygons.length > 0) {

@@ -344,23 +344,24 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
     try {
       console.log('Calculating catchment with params:', params);
       
-      // Use the REAL ArcGIS catchment with demographic data instead of mock data
-      const response = await GooglePlacesService.getArcgisCatchment(
+      // Use INDEPENDENT ArcGIS catchment calls for accurate results
+      console.log('🎯 Using INDEPENDENT catchment calls to prevent polygon interference');
+      const response = await GooglePlacesService.getMultipleIndependentCatchments(
         params.location,
         params.driveTimes,
         params.travelMode
       );
       
-      console.log('ArcGIS Catchment calculation response:', response);
+      console.log('✅ Independent catchment calculations completed:', response);
       
-      // Process ArcGIS response structure (different from calculate-catchment)
+      // Process independent catchment response structure
       const catchmentData = response.polygons || [];
       setCatchmentResults(catchmentData);
       setShowResults(true);
       
       // Add catchment polygons to map
       if (map && catchmentData && catchmentData.length > 0) {
-        console.log('Adding ArcGIS catchment polygons to map');
+        console.log(`🗺️ Adding ${catchmentData.length} independent catchment polygons to map`);
         if (map.addCatchmentPolygons) {
           map.addCatchmentPolygons(catchmentData);
         } else {
