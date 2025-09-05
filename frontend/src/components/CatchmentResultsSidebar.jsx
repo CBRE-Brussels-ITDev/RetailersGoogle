@@ -14,11 +14,26 @@ const CatchmentResultsSidebar = ({
   isGeneratingPDF,
   onExportCatchmentExcel,
   onExportPlacesExcel,
-  placesData
+  placesData,
+  businessData
 }) => {
   const [activeTab, setActiveTab] = useState(0);
 
   if (!isOpen || !catchmentData || catchmentData.length === 0) return null;
+
+  // Handle detailed sector export
+  const handleExportDetailedSectors = async () => {
+    try {
+      await import('../services/GooglePlaces.jsx').then(module => {
+        const GooglePlacesService = module.default;
+        return GooglePlacesService.exportDetailedSectorsCSV(catchmentData);
+      });
+      console.log('✅ Detailed sectors CSV export completed');
+    } catch (error) {
+      console.error('❌ Error exporting detailed sectors:', error);
+      alert('Error exporting detailed sector data. Please try again.');
+    }
+  };
 
   const formatNumber = (num) => {
     if (num === undefined || num === null) return 'N/A';
@@ -184,7 +199,10 @@ const CatchmentResultsSidebar = ({
           }
         `}
       </style>
-      <div style={styles.sidebar}>
+      <div style={{
+        ...styles.sidebar,
+        ...(activeTab === catchmentData.length ? { width: '500px' } : {})
+      }}>
       {/* Header - matching old design */}
       <div style={styles.header}>
         <div style={styles.headerContent}>
@@ -216,46 +234,133 @@ const CatchmentResultsSidebar = ({
               {catchment.name}
             </button>
           ))}
+          {/* Business Analysis Tab */}
+          {businessData && businessData.businesses && businessData.businesses.length > 0 && (
+            <button
+              key="business"
+              className={`tab-button ${activeTab === catchmentData.length ? 'active' : ''}`}
+              onClick={() => setActiveTab(catchmentData.length)}
+              style={{
+                ...styles.tabButton,
+                ...(activeTab === catchmentData.length ? styles.tabButtonActive : {})
+              }}
+            >
+              🏪 Business Analysis
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div style={styles.content}>
-        {/* Purchase Power Section */}
-        <div style={styles.purchasePowerSection}>
-          <div style={styles.purchasePowerGrid}>
-            <div style={styles.purchasePowerItem}>
-              <span style={styles.purchasePowerLabel}>Purchase Power</span>
-              <span style={styles.purchasePowerValue}>
-                {currentCatchment.totalMIO ? `${currentCatchment.totalMIO} € M` : 'N/A'}
-              </span>
+        {/* Show Business Analysis if Business tab is active */}
+        {activeTab === catchmentData.length && businessData && businessData.businesses && businessData.businesses.length > 0 ? (
+          <div style={styles.businessSection}>
+            <h3 style={styles.businessTitle}>
+              🏪 Business Analysis: {businessData.summary.category}
+            </h3>
+            <div style={styles.businessSummary}>
+              <p>Found {businessData.businesses.length} businesses • Sorted by {businessData.summary.sortBy}</p>
             </div>
-            <div style={styles.purchasePowerItem}>
-              <span style={styles.purchasePowerLabel}>Purchase Power / person</span>
-              <span style={styles.purchasePowerValue}>
-                {formatCurrency(currentCatchment.purchasePowerPerson)}
-              </span>
-            </div>
-            <div style={styles.purchasePowerItem}>
-              <span style={styles.purchasePowerLabel}>Household Size</span>
-              <span style={styles.purchasePowerValue}>
-                {currentCatchment.householdsMember || 'N/A'}
-              </span>
-            </div>
-            <div style={styles.purchasePowerItem}>
-              <span style={styles.purchasePowerLabel}>Households</span>
-              <span style={styles.purchasePowerValue}>
-                {formatNumber(currentCatchment.totalHouseHolds)}
-              </span>
-            </div>
-            <div style={styles.purchasePowerItem}>
-              <span style={styles.purchasePowerLabel}>Population</span>
-              <span style={styles.purchasePowerValue}>
-                {formatNumber(currentCatchment.totalPopulation)}
-              </span>
+            
+            {/* Business Table */}
+            <div style={styles.businessTable}>
+              <div style={styles.businessTableHeader}>
+                <div style={styles.businessTableHeaderCell}>Index</div>
+                <div style={styles.businessTableHeaderCell}>Picture</div>
+                <div style={styles.businessTableHeaderCell}>Name</div>
+                <div style={styles.businessTableHeaderCell}>Rating</div>
+                <div style={styles.businessTableHeaderCell}>Distance</div>
+                <div style={styles.businessTableHeaderCell}>Action</div>
+              </div>
+              {businessData.businesses.map((business, index) => (
+                <div key={business.place_id || index} style={styles.businessTableRow}>
+                  <div style={styles.businessTableCell}>{index + 1}</div>
+                  <div style={styles.businessTableCell}>
+                    {business.photo_urls && business.photo_urls.length > 0 ? (
+                      <img 
+                        src={business.photo_urls[0]}
+                        alt={business.name}
+                        style={styles.businessImage}
+                        onError={(e) => {
+                          e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjBmMGYwIi8+CjxwYXRoIGQ9Ik0yMCAyOEMxOC44OTU0IDI4IDE4IDI3LjEwNDYgMTggMjZDMTggMjQuODk1NCAxOC44OTU0IDI0IDIwIDI0QzIxLjEwNDYgMjQgMjIgMjQuODk1NCAyMiAyNkMyMiAyNy4xMDQ2IDIxLjEwNDYgMjggMjAgMjhaIiBmaWxsPSIjY2NjIi8+CjxwYXRoIGQ9Ik0xMiAxNkMxMiAxMi42ODYzIDEyIDEwLjM0MzEgMTMuMTcxNiA5LjE3MTU3QzE0LjM0MzEgOCAxNi42ODYzIDggMjAgOEMyMy4zMTM3IDggMjUuNjU2OSA4IDI2LjgyODQgOS4xNzE1N0MyOCAxMC4zNDMxIDI4IDEyLjY4NjMgMjggMTZWMjRDMjggMjcuMzEzNyAyOCAyOS42NTY5IDI2LjgyODQgMzAuODI4NEMyNS42NTY5IDMyIDIzLjMxMzcgMzIgMjAgMzJDMTYuNjg2MyAzMiAxNC4zNDMxIDMyIDEzLjE3MTYgMzAuODI4NEMxMiAyOS42NTY5IDEyIDI3LjMxMzcgMTIgMjRWMTZaIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMiIvPgo8cGF0aCBkPSJNMTcgMTRIMjNNMTcgMThIMjEiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+';
+                        }}
+                      />
+                    ) : (
+                      <div style={styles.businessImagePlaceholder}>📷</div>
+                    )}
+                  </div>
+                  <div style={styles.businessTableCell}>
+                    <strong>{business.name}</strong>
+                    <br />
+                    <small style={styles.businessAddress}>
+                      {business.vicinity || business.formatted_address || 'Address not available'}
+                    </small>
+                  </div>
+                  <div style={styles.businessTableCell}>
+                    <div style={styles.rating}>
+                      ⭐ {business.rating ? business.rating.toFixed(1) : 'N/A'}
+                    </div>
+                  </div>
+                  <div style={styles.businessTableCell}>
+                    <div style={styles.distance}>
+                      {business.distance ? `${Math.round(business.distance)}m` : 'N/A'}
+                    </div>
+                  </div>
+                  <div style={styles.businessTableCell}>
+                    <button 
+                      style={styles.redirectButton}
+                      onClick={() => {
+                        if (business.place_id) {
+                          window.open(`https://www.google.com/maps/place/?q=place_id:${business.place_id}`, '_blank');
+                        }
+                      }}
+                    >
+                      🔗 View
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        ) : (
+          // Show Catchment Data (existing content)
+          <>
+            {/* Purchase Power Section */}
+            <div style={styles.purchasePowerSection}>
+              <div style={styles.purchasePowerGrid}>
+                <div style={styles.purchasePowerItem}>
+                  <span style={styles.purchasePowerLabel}>Purchase Power</span>
+                  <span style={styles.purchasePowerValue}>
+                    {currentCatchment.totalMIO ? `${currentCatchment.totalMIO} € M` : 'N/A'}
+                  </span>
+                </div>
+                <div style={styles.purchasePowerItem}>
+                  <span style={styles.purchasePowerLabel}>Purchase Power / person</span>
+                  <span style={styles.purchasePowerValue}>
+                    {formatCurrency(currentCatchment.purchasePowerPerson)}
+                  </span>
+                </div>
+                <div style={styles.purchasePowerItem}>
+                  <span style={styles.purchasePowerLabel}>Household Size</span>
+                  <span style={styles.purchasePowerValue}>
+                    {currentCatchment.householdsMember || 'N/A'}
+                  </span>
+                </div>
+                <div style={styles.purchasePowerItem}>
+                  <span style={styles.purchasePowerLabel}>Households</span>
+                  <span style={styles.purchasePowerValue}>
+                    {formatNumber(currentCatchment.totalHouseHolds)}
+                  </span>
+                </div>
+                <div style={styles.purchasePowerItem}>
+                  <span style={styles.purchasePowerLabel}>Population</span>
+                  <span style={styles.purchasePowerValue}>
+                    {formatNumber(currentCatchment.totalPopulation)}
+                  </span>
+                </div>
+              </div>
+            </div>
 
         {/* Gender Percentage Section */}
         <div style={styles.section}>
@@ -334,6 +439,8 @@ const CatchmentResultsSidebar = ({
             />
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Footer - matching old design */}
@@ -349,6 +456,18 @@ const CatchmentResultsSidebar = ({
             }}
           >
             <span style={styles.buttonIcon}>📊</span> Export CSV
+          </button>
+          <button 
+            className="results-sidebar-excel-btn"
+            onClick={handleExportDetailedSectors}
+            disabled={isGeneratingPDF}
+            style={{
+              ...styles.footerButton,
+              opacity: isGeneratingPDF ? 0.6 : 1,
+              backgroundColor: '#1f5f99'
+            }}
+          >
+            <span style={styles.buttonIcon}>🔍</span> All Sectors CSV
           </button>
           <button 
             className="results-sidebar-pdf-btn"
@@ -554,6 +673,96 @@ const styles = {
   },
   buttonIcon: {
     fontSize: '12px'
+  },
+  // Business Analysis Styles
+  businessSection: {
+    padding: '15px 0'
+  },
+  businessTitle: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#032842',
+    marginBottom: '10px',
+    textAlign: 'center'
+  },
+  businessSummary: {
+    fontSize: '14px',
+    color: '#666',
+    marginBottom: '15px',
+    textAlign: 'center'
+  },
+  businessTable: {
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    overflow: 'hidden'
+  },
+  businessTableHeader: {
+    display: 'grid',
+    gridTemplateColumns: '40px 60px 1fr 70px 70px 70px',
+    backgroundColor: '#f8f9fa',
+    borderBottom: '1px solid #ddd'
+  },
+  businessTableHeaderCell: {
+    padding: '8px 4px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    borderRight: '1px solid #ddd'
+  },
+  businessTableRow: {
+    display: 'grid',
+    gridTemplateColumns: '40px 60px 1fr 70px 70px 70px',
+    borderBottom: '1px solid #eee',
+    '&:last-child': {
+      borderBottom: 'none'
+    }
+  },
+  businessTableCell: {
+    padding: '8px 4px',
+    fontSize: '11px',
+    borderRight: '1px solid #eee',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center'
+  },
+  businessImage: {
+    width: '40px',
+    height: '40px',
+    objectFit: 'cover',
+    borderRadius: '4px'
+  },
+  businessImagePlaceholder: {
+    width: '40px',
+    height: '40px',
+    backgroundColor: '#f0f0f0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '4px',
+    fontSize: '16px'
+  },
+  businessAddress: {
+    color: '#888',
+    fontSize: '10px'
+  },
+  rating: {
+    color: '#ff9500',
+    fontWeight: 'bold'
+  },
+  distance: {
+    color: '#666',
+    fontWeight: 'bold'
+  },
+  redirectButton: {
+    padding: '4px 8px',
+    fontSize: '10px',
+    backgroundColor: '#032842',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s'
   }
 };
 

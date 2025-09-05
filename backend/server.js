@@ -1232,7 +1232,12 @@ app.post('/get-places-in-radius', async (req, res) => {
                 },
                 vicinity: place.vicinity,
                 price_level: place.price_level,
-                business_status: place.business_status
+                business_status: place.business_status,
+                photos: place.photos || [], // Include photo references
+                // Add photo URLs for convenience
+                photo_urls: place.photos ? place.photos.slice(0, 1).map(photo => 
+                    `https://maps.googleapis.com/maps/api/place/photo?maxwidth=100&photoreference=${photo.photo_reference}&key=${API_KEY}`
+                ) : []
             }));
 
             const placeIds = uniquePlaces.map(place => place.place_id);
@@ -1302,7 +1307,12 @@ app.post('/get-places-in-radius', async (req, res) => {
                 },
                 vicinity: place.vicinity,
                 price_level: place.price_level,
-                business_status: place.business_status
+                business_status: place.business_status,
+                photos: place.photos || [], // Include photo references
+                // Add photo URLs for convenience
+                photo_urls: place.photos ? place.photos.slice(0, 1).map(photo => 
+                    `https://maps.googleapis.com/maps/api/place/photo?maxwidth=100&photoreference=${photo.photo_reference}&key=${API_KEY}`
+                ) : []
             }));
 
             const placeIds = allCategoryResults.map(place => place.place_id);
@@ -1545,7 +1555,7 @@ app.post('/generate-commerce-report', async (req, res) => {
         // For now, generate a simple PDF with the available catchment template
         // In production, you would create a specific commerce analysis template
         const fallbackData = {
-            template: { shortid: "4HTixpM" }, // Using existing catchment template as fallback
+            template: { shortid: "5brP5G-" }, // Updated to working template
             data: {
                 date: templateData.generatedDate,
                 url: "https://via.placeholder.com/800x400/007bff/ffffff?text=Commerce+Analysis+Location",
@@ -1599,12 +1609,12 @@ app.post('/generate-commerce-report', async (req, res) => {
     }
 });
 
-// NEW: JSReport PDF Generation endpoint
+// ENHANCED: JSReport PDF Generation endpoint with Business Analysis Support
 app.post('/generate-catchment-report', async (req, res) => {
-    console.log('PDF Generation endpoint called');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Enhanced PDF Generation endpoint called');
+    console.log('Request body keys:', Object.keys(req.body));
     
-    const { catchmentData, address, imageUrl, timestamp, timeOfDay } = req.body;
+    const { catchmentData, address, imageUrl, timestamp, timeOfDay, businessData } = req.body;
 
     if (!catchmentData || !Array.isArray(catchmentData) || catchmentData.length === 0) {
         console.log('Invalid catchmentData:', catchmentData);
@@ -1614,12 +1624,14 @@ app.post('/generate-catchment-report', async (req, res) => {
     }
 
     try {
-        console.log('Generating PDF using JSReport for catchment data:', catchmentData.length, 'areas');
-        console.log('Sample catchment area data:', JSON.stringify(catchmentData[0], null, 2));
+        console.log('Generating enhanced PDF with business analysis:', catchmentData.length, 'catchment areas');
+        if (businessData) {
+            console.log('Business data included:', Object.keys(businessData));
+        }
         
         // Transform catchment data to match the expected JSReport structure
         const defaultBreaks = catchmentData.map((area, index) => {
-            console.log(`Processing area ${index}:`, JSON.stringify(area, null, 2));
+            console.log(`Processing catchment area ${index}:`, area.name || area.driveTime);
             
             // Ensure we have all required fields with proper defaults
             const totalPopulation = area.totalPopulation || 0;
@@ -1628,32 +1640,94 @@ app.post('/generate-catchment-report', async (req, res) => {
             const pourcentAge0014 = area.pourcentAge0014 || 14;
             const pourcentAge1529 = area.pourcentAge1529 || 17;
             const pourcentAge3044 = area.pourcentAge3044 || 18;
-            const pourcentAge4559 = area.pourcentAge4559 || 22; // Add missing age group
+            const pourcentAge4559 = area.pourcentAge4559 || 22;
             const pourcentAge60PL = area.pourcentAge60PL || 28;
             const totalHouseHolds = area.totalHouseHolds || Math.floor(totalPopulation / 2.3);
             const householdsMember = parseFloat(area.householdsMember) || 2.3;
             const totalMIO = area.totalMIO || ((area.purchasePowerPerson || 21621) * totalPopulation) / 1000000;
             const purchasePowerPerson = area.purchasePowerPerson || 21621;
 
-            const processedBreak = {
-                name: `${area.driveTime || area.number || 15} minutes`,
+            return {
+                name: `${area.driveTime || area.breakTime || area.number || 15} minutes`,
                 totalPopulation: totalPopulation,
                 pourcentMan: Math.round(pourcentMan),
                 pourcentWomen: Math.round(pourcentWomen),
                 pourcentAge0014: Math.round(pourcentAge0014),
                 pourcentAge1529: Math.round(pourcentAge1529),
                 pourcentAge3044: Math.round(pourcentAge3044),
-                pourcentAge4559: Math.round(pourcentAge4559), // Include the missing age group
+                pourcentAge4559: Math.round(pourcentAge4559),
                 pourcentAge60PL: Math.round(pourcentAge60PL),
                 totalHouseHolds: totalHouseHolds,
                 householdsMember: householdsMember,
                 totalMIO: totalMIO,
                 purchasePowerPerson: purchasePowerPerson.toString()
             };
-            
-            console.log(`Processed break ${index}:`, JSON.stringify(processedBreak, null, 2));
-            return processedBreak;
         });
+
+        // Prepare business analysis data structure (if provided)
+        let businessAnalysis = null;
+        if (businessData && businessData.businesses && businessData.businesses.length > 0) {
+            console.log('Processing business analysis data...');
+            
+            // Calculate business metrics
+            const businesses = businessData.businesses;
+            const validRatings = businesses.filter(b => b.rating && b.rating > 0);
+            const averageRating = validRatings.length > 0 
+                ? (validRatings.reduce((sum, b) => sum + b.rating, 0) / validRatings.length).toFixed(1)
+                : 'N/A';
+            
+            // Select top 5 businesses for the report
+            const topBusinesses = businesses
+                .filter(b => b.rating && b.rating > 0)
+                .sort((a, b) => {
+                    // Sort by rating first, then by review count
+                    if (b.rating !== a.rating) return b.rating - a.rating;
+                    return (b.user_ratings_total || 0) - (a.user_ratings_total || 0);
+                })
+                .slice(0, 5)
+                .map(business => ({
+                    name: business.name || 'Unknown Business',
+                    rating: business.rating || 0,
+                    reviewCount: business.user_ratings_total || 0,
+                    priceLevel: business.price_level || null,
+                    distance: business.distance ? Math.round(business.distance) : 'N/A',
+                    address: business.vicinity || business.formatted_address || 'Address not available'
+                }));
+
+            // Determine market characteristics
+            const marketSaturation = businesses.length > 20 ? 'High' : 
+                                   businesses.length > 10 ? 'Medium' : 'Low';
+            
+            const competitionLevel = averageRating > 4.2 ? 'High' : 
+                                   averageRating > 3.5 ? 'Medium' : 'Low';
+            
+            const marketOpportunity = marketSaturation === 'Low' && competitionLevel !== 'High' ? 'Excellent' :
+                                    marketSaturation === 'Medium' ? 'Good' : 'Challenging';
+
+            const averageDistance = businesses.length > 0 
+                ? Math.round(businesses.reduce((sum, b) => sum + (b.distance || 0), 0) / businesses.length)
+                : 0;
+
+            businessAnalysis = {
+                category: businessData.category || 'Business',
+                totalBusinesses: businesses.length,
+                averageRating: averageRating,
+                topBusinesses: topBusinesses,
+                categoryAnalysis: {
+                    marketSaturation: marketSaturation,
+                    competitionLevel: competitionLevel,
+                    marketOpportunity: marketOpportunity,
+                    averageDistance: averageDistance
+                }
+            };
+            
+            console.log('Business analysis prepared:', {
+                category: businessAnalysis.category,
+                total: businessAnalysis.totalBusinesses,
+                avgRating: businessAnalysis.averageRating,
+                topCount: businessAnalysis.topBusinesses.length
+            });
+        }
 
         // Format the date properly
         const formattedDate = new Date().toLocaleDateString('en-GB', {
@@ -1662,17 +1736,24 @@ app.post('/generate-catchment-report', async (req, res) => {
             year: 'numeric'
         });
 
-        // Prepare request body for JSReport with exact structure
+        // Prepare enhanced request body for JSReport
         const requestBody = {
-            template: { shortid: "4HTixpM" },
+            template: { shortid: "5brP5G-" }, // Updated to working template
             data: {
-                date: formattedDate, // Format: "15/09/2022"
-                url: imageUrl || "https://media.wired.com/photos/59269cd37034dc5f91bec0f1/191:100/w_1280,c_limit/GoogleMapTA.jpg", // Map image URL
-                defaultBreaks: defaultBreaks
+                date: formattedDate,
+                url: imageUrl || "https://via.placeholder.com/800x400/007bff/ffffff?text=Catchment+Analysis+Map",
+                defaultBreaks: defaultBreaks,
+                // Include business analysis if available
+                ...(businessAnalysis && { businessAnalysis: businessAnalysis })
             }
         };
 
-        console.log('Sending request to JSReport with structured data:', JSON.stringify(requestBody, null, 2));
+        console.log('Sending enhanced request to JSReport');
+        console.log('Data structure:', {
+            date: requestBody.data.date,
+            catchments: requestBody.data.defaultBreaks.length,
+            hasBusinessAnalysis: !!requestBody.data.businessAnalysis
+        });
 
         // Make request to JSReport Online
         const response = await axios.post("https://cbrereport.jsreportonline.net/api/report", requestBody, {
@@ -1681,7 +1762,7 @@ app.post('/generate-catchment-report', async (req, res) => {
                 Authorization: `Basic YmUtaXRkZXZAY2JyZS5jb206V2F0ZXJsb28xNio=`,
             },
             responseType: 'arraybuffer',
-            timeout: 30000 // 30 second timeout
+            timeout: 30000
         });
 
         if (response.status !== 200) {
@@ -1689,23 +1770,24 @@ app.post('/generate-catchment-report', async (req, res) => {
         }
 
         // Set response headers for PDF download
-        const filename = `CBRE_CATCHMENT_${new Date().toISOString().slice(0, 10)}.pdf`;
+        const reportType = businessAnalysis ? 'CATCHMENT_BUSINESS_ANALYSIS' : 'CATCHMENT';
+        const filename = `CBRE_${reportType}_${new Date().toISOString().slice(0, 10)}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         
         // Send the PDF data
         res.send(Buffer.from(response.data));
         
-        console.log('PDF generated successfully using JSReport');
+        console.log(`Enhanced PDF generated successfully: ${filename}`);
         
     } catch (error) {
-        console.error('Error generating PDF with JSReport:');
+        console.error('Error generating enhanced PDF with JSReport:');
         console.error('Error message:', error.message);
         console.error('Error response:', error.response?.data?.toString() || 'No response data');
         console.error('Error status:', error.response?.status || 'No status');
         
         res.status(500).json({ 
-            error: 'Error generating PDF report',
+            error: 'Error generating enhanced PDF report',
             details: error.message,
             jsreportError: error.response?.data?.toString() || null
         });
@@ -2179,6 +2261,113 @@ function assessMarketEntryDifficulty(place, allPlaces) {
 }
 
 // Excel export endpoint for catchment data
+// NEW: Export detailed sector analysis to CSV
+app.post('/export-sectors-csv', async (req, res) => {
+    const { catchmentData } = req.body;
+
+    if (!catchmentData || !Array.isArray(catchmentData) || catchmentData.length === 0) {
+        return res.status(400).json({ 
+            error: 'Catchment data array is required and must not be empty' 
+        });
+    }
+
+    try {
+        console.log('Exporting detailed sector analysis to CSV...');
+        
+        // Generate comprehensive CSV with all sector details
+        let csvContent = 'DETAILED SECTOR ANALYSIS - CBRE BELGIUM LAYER\n';
+        csvContent += `Export Date,${new Date().toISOString()}\n`;
+        csvContent += `Number of Catchments,${catchmentData.length}\n\n`;
+        
+        // For each catchment, export all sector details
+        catchmentData.forEach((catchment, index) => {
+            const sectors = catchment.demographics?.sectorAnalysis?.sectorCoverageData || [];
+            
+            csvContent += `CATCHMENT ${index + 1}: ${catchment.breakTime || catchment.name} MINUTES\n`;
+            csvContent += `Total Population,${catchment.totalPopulation}\n`;
+            csvContent += `Total Sectors Analyzed,${sectors.length}\n`;
+            csvContent += `Calculation Method,${catchment.demographics?.sectorAnalysis?.calculationMethod || 'N/A'}\n\n`;
+            
+            if (sectors.length > 0) {
+                // Sector details headers
+                const headers = [
+                    'Sector_ID',
+                    'Sector_Name',
+                    'NIS_Code',
+                    'Coverage_Percentage',
+                    'Population_Total',
+                    'Population_Male',
+                    'Population_Female',
+                    'Age_0_14',
+                    'Age_15_29',
+                    'Age_30_44',
+                    'Age_45_59',
+                    'Age_60_Plus',
+                    'Households_Total',
+                    'Household_Size',
+                    'Purchase_Power_Premium',
+                    'Purchase_Power_Millions_EUR',
+                    'Purchase_Power_EUR',
+                    'Purchase_Power_CI',
+                    'Coverage_Area_KM2',
+                    'Total_Area_KM2',
+                    'Catchment_Minutes'
+                ];
+                
+                csvContent += headers.join(',') + '\n';
+                
+                // Sector data rows
+                sectors.forEach(sector => {
+                    const row = [
+                        sector.sectorId || 'N/A',
+                        `"${sector.sectorName || 'N/A'}"`,
+                        sector.nisCode || 'N/A',
+                        (sector.coveragePercentage || 0).toFixed(2),
+                        sector.population || 0,
+                        sector.male || 0,
+                        sector.female || 0,
+                        sector.age0014 || 0,
+                        sector.age1529 || 0,
+                        sector.age3044 || 0,
+                        sector.age4559 || 0,
+                        sector.age60pl || 0,
+                        sector.households || 0,
+                        (sector.householdSize || 0).toFixed(1),
+                        sector.purchasePowerPrm || 0,
+                        (sector.purchasePowerMio || 0).toFixed(3),
+                        sector.purchasePowerEuro || 0,
+                        sector.purchasePowerCI || 0,
+                        (sector.coverageAreaSqKm || 0).toFixed(3),
+                        (sector.totalAreaSqKm || 0).toFixed(3),
+                        sector.catchmentMinutes || catchment.breakTime
+                    ];
+                    csvContent += row.join(',') + '\n';
+                });
+                
+                csvContent += '\n';
+            } else {
+                csvContent += 'No sector data available for this catchment\n\n';
+            }
+        });
+        
+        // Set headers for CSV download
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="CBRE_Detailed_Sectors_${new Date().toISOString().split('T')[0]}.csv"`);
+        
+        // Send CSV content
+        res.send(csvContent);
+        
+        console.log('✅ Detailed sector CSV export completed');
+        
+    } catch (error) {
+        console.error('Error exporting detailed sectors CSV:', error);
+        res.status(500).json({ 
+            error: 'Failed to export sector data',
+            details: error.message 
+        });
+    }
+});
+
 app.post('/export-catchment-excel', async (req, res) => {
     const { catchmentData, selectedLocation, placesData } = req.body;
 

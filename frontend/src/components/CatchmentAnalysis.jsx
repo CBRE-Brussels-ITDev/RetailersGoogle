@@ -359,6 +359,23 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
       setCatchmentResults(catchmentData);
       setShowResults(true);
       
+      // Business Analysis: Search for businesses if requested
+      let businessData = null;
+      if (params.businessAnalysis) {
+        console.log('🏪 Starting business analysis:', params.businessAnalysis);
+        try {
+          businessData = await searchBusinessesInCatchments(
+            catchmentData, 
+            params.businessAnalysis,
+            params.location
+          );
+          console.log('✅ Business analysis completed:', businessData);
+        } catch (businessError) {
+          console.error('❌ Business analysis failed:', businessError);
+          // Continue with catchment display even if business search fails
+        }
+      }
+      
       // Add catchment polygons to map
       if (map && catchmentData && catchmentData.length > 0) {
         console.log(`🗺️ Adding ${catchmentData.length} independent catchment polygons to map`);
@@ -366,6 +383,16 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
           map.addCatchmentPolygons(catchmentData);
         } else {
           console.error('Map addCatchmentPolygons method not available');
+        }
+        
+        // Add business markers to map if available
+        if (businessData && businessData.businesses && businessData.businesses.length > 0) {
+          console.log(`🏪 Adding ${businessData.businesses.length} business markers to map`);
+          if (map.addBusinessMarkers) {
+            map.addBusinessMarkers(businessData.businesses);
+          } else {
+            console.error('Map addBusinessMarkers method not available');
+          }
         }
       }
       
@@ -391,8 +418,95 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
     document.body.removeChild(link);
   };
 
+  // Business search function for catchment areas
+  const searchBusinessesInCatchments = async (catchmentAreas, businessConfig, centerLocation) => {
+    console.log('🔍 Searching for businesses in catchment areas...');
+    
+    try {
+      // Use the largest catchment area for search radius
+      const maxBreakTime = Math.max(...catchmentAreas.map(c => c.breakTime));
+      const searchRadius = maxBreakTime * 60 * 20; // Approximate: 20 meters per second average speed
+      
+      console.log(`📍 Search radius: ${searchRadius}m for ${businessConfig.category} businesses`);
+      
+      // Search for places using Google Places API
+      const placesResponse = await GooglePlacesService.getPlacesInRadius(
+        centerLocation.lat,
+        centerLocation.lng,
+        searchRadius,
+        businessConfig.category,
+        false
+      );
+      
+      console.log(`📊 Found ${placesResponse.places?.length || 0} businesses`);
+      
+      if (!placesResponse.places || placesResponse.places.length === 0) {
+        return { businesses: [], summary: { total: 0, category: businessConfig.category } };
+      }
+      
+      // Filter and sort businesses based on user preferences
+      let filteredBusinesses = placesResponse.places
+        .filter(place => place.rating && place.rating > 0) // Only businesses with ratings
+        .map(place => ({
+          ...place,
+          // Calculate distance from center (approximate)
+          distance: calculateDistance(
+            centerLocation.lat, centerLocation.lng,
+            place.geometry?.location?.lat || place.lat,
+            place.geometry?.location?.lng || place.lng
+          )
+        }));
+      
+      // Sort by user preference
+      if (businessConfig.sortBy === 'rating') {
+        filteredBusinesses.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      } else {
+        filteredBusinesses.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+      }
+      
+      // Limit to requested count
+      filteredBusinesses = filteredBusinesses.slice(0, businessConfig.count);
+      
+      console.log(`✅ Filtered to top ${filteredBusinesses.length} businesses`);
+      
+      return {
+        businesses: filteredBusinesses,
+        summary: {
+          total: filteredBusinesses.length,
+          category: businessConfig.category,
+          sortBy: businessConfig.sortBy,
+          searchRadius: searchRadius
+        }
+      };
+      
+    } catch (error) {
+      console.error('Error searching businesses:', error);
+      throw error;
+    }
+  };
+
+  // Helper function to calculate distance between two points
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c * 1000; // Distance in meters
+  };
+
   const generateCSVReport = (results, params) => {
-    const headers = [
+    let csvContent = '';
+    
+    // SECTION 1: Catchment Summary
+    csvContent += 'CATCHMENT ANALYSIS SUMMARY\n';
+    csvContent += `Analysis Date,${new Date().toISOString().split('T')[0]}\n`;
+    csvContent += `Location,"${params?.location?.lat || 'N/A'}, ${params?.location?.lng || 'N/A'}"\n`;
+    csvContent += `Travel Mode,${params?.travelMode || 'N/A'}\n\n`;
+    
+    const summaryHeaders = [
       'Drive Time (min)',
       'Total Population',
       'Households',
@@ -404,11 +518,13 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
       'Age 30-44 (%)',
       'Age 45-59 (%)',
       'Age 60+ (%)',
-      'Purchase Power per Person (€)'
+      'Purchase Power per Person (€)',
+      'Total Purchase Power (€M)',
+      'Sectors Analyzed'
     ];
 
-    const rows = results.map(result => [
-      result.driveTime,
+    const summaryRows = results.map(result => [
+      result.breakTime || result.driveTime,
       result.totalPopulation,
       result.totalHouseHolds,
       result.householdsMember,
@@ -419,10 +535,74 @@ const CatchmentAnalysis = ({ map, selectedLocation, onLocationSelect }) => {
       result.pourcentAge3044?.toFixed(1) || 0,
       result.pourcentAge4559?.toFixed(1) || 0,
       result.pourcentAge60PL?.toFixed(1) || 0,
-      result.purchasePowerPerson
+      result.purchasePowerPerson,
+      result.totalMIO,
+      result.demographics?.sectorAnalysis?.sectorsAnalyzed || 'N/A'
     ]);
 
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
+    csvContent += summaryHeaders.join(',') + '\n';
+    csvContent += summaryRows.map(row => row.join(',')).join('\n');
+    
+    // SECTION 2: Detailed Sector Data for each catchment
+    results.forEach((result, catchmentIndex) => {
+      const sectors = result.demographics?.sectorAnalysis?.sectorCoverageData || [];
+      if (sectors.length > 0) {
+        csvContent += `\n\nDETAILED SECTOR DATA - ${result.breakTime || result.driveTime} MINUTES CATCHMENT\n`;
+        
+        const sectorHeaders = [
+          'Sector ID',
+          'Sector Name',
+          'NIS Code',
+          'Coverage %',
+          'Population Total',
+          'Male',
+          'Female',
+          'Age 0-14',
+          'Age 15-29',
+          'Age 30-44',
+          'Age 45-59',
+          'Age 60+',
+          'Households',
+          'Household Size',
+          'Purchase Power Premium',
+          'Purchase Power (€M)',
+          'Purchase Power (€)',
+          'Purchase Power CI',
+          'Coverage Area (km²)',
+          'Total Area (km²)'
+        ];
+        
+        csvContent += sectorHeaders.join(',') + '\n';
+        
+        sectors.forEach(sector => {
+          const sectorRow = [
+            sector.sectorId || 'N/A',
+            `"${sector.sectorName || 'N/A'}"`, // Quotes for names with commas
+            sector.nisCode || 'N/A',
+            sector.coveragePercentage?.toFixed(2) || 0,
+            sector.population || 0,
+            sector.male || 0,
+            sector.female || 0,
+            sector.age0014 || 0,
+            sector.age1529 || 0,
+            sector.age3044 || 0,
+            sector.age4559 || 0,
+            sector.age60pl || 0,
+            sector.households || 0,
+            sector.householdSize || 0,
+            sector.purchasePowerPrm || 0,
+            sector.purchasePowerMio?.toFixed(3) || 0,
+            sector.purchasePowerEuro || 0,
+            sector.purchasePowerCI || 0,
+            sector.coverageAreaSqKm?.toFixed(3) || 0,
+            sector.totalAreaSqKm?.toFixed(3) || 0
+          ];
+          csvContent += sectorRow.join(',') + '\n';
+        });
+      }
+    });
+    
+    return csvContent;
   };
 
   const clearResults = () => {

@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CBRE Catchment Analysis with Business Intelligence</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            line-height: 1.4;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 20px;
+        }
+        
+        .cbre-logo {
+            color: #007bff;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .report-title {
+            font-size: 22px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .report-date {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .map-section {
+            text-align: center;
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+        
+        .map-image {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .catchment-section {
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+        
+        .catchment-header {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .catchment-content {
+            border: 2px solid #007bff;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #007bff;
+        }
+        
+        .metric-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .demographics-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .demo-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .demo-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        
+        .demo-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 5px 0;
+        }
+        
+        .demo-label {
+            color: #666;
+        }
+        
+        .demo-value {
+            font-weight: 600;
+            color: #007bff;
+        }
+        
+        /* Business Analysis Styles */
+        .business-section {
+            margin: 30px 0;
+            page-break-inside: avoid;
+        }
+        
+        .business-header {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .business-content {
+            border: 2px solid #28a745;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            padding: 20px;
+            background: #f8fff9;
+        }
+        
+        .business-overview {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .business-metric {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #28a745;
+        }
+        
+        .business-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .business-table th {
+            background: #28a745;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .business-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .business-table tr:hover {
+            background: #f8fff9;
+        }
+        
+        .rating-stars {
+            color: #ffc107;
+            font-size: 14px;
+        }
+        
+        .price-level {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .market-analysis {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .analysis-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }
+        
+        /* Color utilities for catchments */
+        .color-0 { border-left-color: #007bff; }
+        .color-1 { border-left-color: #ffc107; }
+        .color-2 { border-left-color: #dc3545; }
+        .color-3 { border-left-color: #28a745; }
+        .color-4 { border-left-color: #6f42c1; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="cbre-logo">CBRE</div>
+        <div class="report-title">Catchment Analysis Report</div>
+        <div class="report-date">Generated on {{date}}</div>
+    </div>
+
+    <!-- Map Section -->
+    <div class="map-section">
+        <img src="{{url}}" alt="Catchment Map" class="map-image" />
+    </div>
+
+    <!-- Catchment Areas Analysis -->
+    {{#each defaultBreaks}}
+    <div class="catchment-section">
+        <div class="catchment-header color-{{@index}}">
+            📍 {{name}} Catchment Area
+        </div>
+        <div class="catchment-content">
+            <!-- Key Metrics -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">{{totalPopulation}}</div>
+                    <div class="metric-label">Total Population</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">{{totalHouseHolds}}</div>
+                    <div class="metric-label">Households</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">{{householdsMember}}</div>
+                    <div class="metric-label">Avg. Household Size</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">€{{purchasePowerPerson}}</div>
+                    <div class="metric-label">Purchase Power/Person</div>
+                </div>
+            </div>
+
+            <!-- Demographics -->
+            <div class="demographics-section">
+                <div class="demo-card">
+                    <div class="demo-title">👥 Gender Distribution</div>
+                    <div class="demo-item">
+                        <span class="demo-label">Women</span>
+                        <span class="demo-value">{{pourcentWomen}}%</span>
+                    </div>
+                    <div class="demo-item">
+                        <span class="demo-label">Men</span>
+                        <span class="demo-value">{{pourcentMan}}%</span>
+                    </div>
+                </div>
+                
+                <div class="demo-card">
+                    <div class="demo-title">🎂 Age Distribution</div>
+                    <div class="demo-item">
+                        <span class="demo-label">0-14 years</span>
+                        <span class="demo-value">{{pourcentAge0014}}%</span>
+                    </div>
+                    <div class="demo-item">
+                        <span class="demo-label">15-29 years</span>
+                        <span class="demo-value">{{pourcentAge1529}}%</span>
+                    </div>
+                    <div class="demo-item">
+                        <span class="demo-label">30-44 years</span>
+                        <span class="demo-value">{{pourcentAge3044}}%</span>
+                    </div>
+                    <div class="demo-item">
+                        <span class="demo-label">45-59 years</span>
+                        <span class="demo-value">{{pourcentAge4559}}%</span>
+                    </div>
+                    <div class="demo-item">
+                        <span class="demo-label">60+ years</span>
+                        <span class="demo-value">{{pourcentAge60PL}}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{/each}}
+
+    <!-- Business Analysis Section (only if business data exists) -->
+    {{#if businessAnalysis}}
+    <div class="page-break"></div>
+    <div class="business-section">
+        <div class="business-header">
+            🏪 Business Analysis - {{businessAnalysis.category}}
+        </div>
+        <div class="business-content">
+            <!-- Business Overview Metrics -->
+            <div class="business-overview">
+                <div class="business-metric">
+                    <div class="metric-value">{{businessAnalysis.totalBusinesses}}</div>
+                    <div class="metric-label">Total Businesses</div>
+                </div>
+                <div class="business-metric">
+                    <div class="metric-value">{{businessAnalysis.averageRating}} ⭐</div>
+                    <div class="metric-label">Average Rating</div>
+                </div>
+                <div class="business-metric">
+                    <div class="metric-value">{{businessAnalysis.categoryAnalysis.marketSaturation}}</div>
+                    <div class="metric-label">Market Saturation</div>
+                </div>
+                <div class="business-metric">
+                    <div class="metric-value">{{businessAnalysis.categoryAnalysis.marketOpportunity}}</div>
+                    <div class="metric-label">Market Opportunity</div>
+                </div>
+            </div>
+
+            <!-- Top Businesses Table -->
+            {{#if businessAnalysis.topBusinesses}}
+            <h3 style="color: #28a745; margin-bottom: 15px;">🏆 Top Performing Businesses</h3>
+            <table class="business-table">
+                <thead>
+                    <tr>
+                        <th>Business Name</th>
+                        <th>Rating</th>
+                        <th>Reviews</th>
+                        <th>Price Level</th>
+                        <th>Distance</th>
+                        <th>Address</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each businessAnalysis.topBusinesses}}
+                    <tr>
+                        <td><strong>{{name}}</strong></td>
+                        <td>
+                            <span class="rating-stars">
+                                {{#if rating}}
+                                {{rating}} ⭐
+                                {{else}}
+                                N/A
+                                {{/if}}
+                            </span>
+                        </td>
+                        <td>{{reviewCount}} reviews</td>
+                        <td>
+                            <span class="price-level">
+                                {{#if priceLevel}}
+                                {{#eq priceLevel 1}}${{/eq}}
+                                {{#eq priceLevel 2}}$${{/eq}}
+                                {{#eq priceLevel 3}}$$${{/eq}}
+                                {{#eq priceLevel 4}}$$$${{/eq}}
+                                {{else}}
+                                N/A
+                                {{/if}}
+                            </span>
+                        </td>
+                        <td>{{distance}}m</td>
+                        <td>{{address}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+            {{/if}}
+
+            <!-- Market Analysis -->
+            <div class="market-analysis">
+                <div class="analysis-card">
+                    <div class="demo-title">📊 Market Insights</div>
+                    <div class="demo-item">
+                        <span class="demo-label">Competition Level</span>
+                        <span class="demo-value">{{businessAnalysis.categoryAnalysis.competitionLevel}}</span>
+                    </div>
+                    <div class="demo-item">
+                        <span class="demo-label">Average Distance</span>
+                        <span class="demo-value">{{businessAnalysis.categoryAnalysis.averageDistance}}m</span>
+                    </div>
+                </div>
+                
+                <div class="analysis-card">
+                    <div class="demo-title">💡 Recommendations</div>
+                    <div style="color: #666; font-size: 14px; line-height: 1.6;">
+                        {{#eq businessAnalysis.categoryAnalysis.marketSaturation "Low"}}
+                        • Market has low saturation - good opportunity for new business
+                        • Limited competition allows for premium positioning
+                        {{/eq}}
+                        {{#eq businessAnalysis.categoryAnalysis.marketSaturation "Medium"}}
+                        • Balanced market with moderate competition
+                        • Focus on differentiation and quality service
+                        {{/eq}}
+                        {{#eq businessAnalysis.categoryAnalysis.marketSaturation "High"}}
+                        • High competition requires strong value proposition
+                        • Consider niche specialization or superior customer experience
+                        {{/eq}}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{/if}}
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>This report was generated by CBRE's Catchment Analysis Platform</p>
+        <p>Data sources: ArcGIS Service Areas, CBRE Belgium Demographics, Google Places API</p>
+    </div>
+
+    <!-- Handlebars Helpers (Define custom helpers if needed) -->
+    <script>
+        // Note: These would be defined in your JSReport helpers, not here
+        // Helper examples for reference:
+        
+        // {{#eq value1 value2}} - checks equality
+        // {{@index}} - gets current index in each loop
+        // {{#if condition}} - conditional rendering
+    </script>
+</body>
+</html>

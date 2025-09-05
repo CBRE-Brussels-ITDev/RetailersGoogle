@@ -56,6 +56,7 @@ function App() {
   const [showCatchmentMode, setShowCatchmentMode] = useState(true);
   const [catchmentData, setCatchmentData] = useState([]);
   const [showCatchmentResults, setShowCatchmentResults] = useState(false);
+  const [businessData, setBusinessData] = useState(null);
 
   // Commerce Analysis state
   const [showCommerceAnalysis, setShowCommerceAnalysis] = useState(false);
@@ -226,12 +227,44 @@ function App() {
       );
       console.log('✅ Independent ArcGIS catchment response:', arcgisResponse);
 
+      // Business Analysis: Search for businesses if requested
+      let businessResults = null;
+      if (params.businessAnalysis && params.businessAnalysis.category) {
+        console.log('🏪 Starting business analysis:', params.businessAnalysis);
+        try {
+          businessResults = await searchBusinessesInCatchments(
+            arcgisResponse.polygons, 
+            params.businessAnalysis,
+            selectedLocation
+          );
+          console.log('✅ Business analysis completed:', businessResults);
+          setBusinessData(businessResults);
+        } catch (businessError) {
+          console.error('❌ Business analysis failed:', businessError);
+          setBusinessData(null);
+          // Continue with catchment display even if business search fails
+        }
+      } else {
+        setBusinessData(null);
+      }
+
       // Set polygons to state and map
       if (arcgisResponse.polygons && arcgisResponse.polygons.length > 0) {
         setCatchmentData(arcgisResponse.polygons);
         setShowCatchmentResults(true);
         if (mapRef.current) {
           mapRef.current.addCatchmentPolygons(arcgisResponse.polygons, params.colors);
+          
+          // Add business markers to map if available
+          if (businessResults && businessResults.businesses && businessResults.businesses.length > 0) {
+            console.log(`🏪 Adding ${businessResults.businesses.length} business markers to map`);
+            console.log('Sample business data:', businessResults.businesses[0]);
+            if (mapRef.current.addBusinessMarkers) {
+              mapRef.current.addBusinessMarkers(businessResults.businesses);
+            } else {
+              console.error('Map addBusinessMarkers method not available');
+            }
+          }
         }
       } else {
         alert('No catchment polygons returned from ArcGIS.');
@@ -242,6 +275,85 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Business search functionality (copied from CatchmentAnalysis)
+  const searchBusinessesInCatchments = async (catchmentAreas, businessConfig, centerLocation) => {
+    console.log('🔍 Searching for businesses in catchment areas...');
+    
+    try {
+      // Use the largest catchment area for search radius
+      const maxBreakTime = Math.max(...catchmentAreas.map(c => c.breakTime));
+      const searchRadius = maxBreakTime * 60 * 20; // Approximate: 20 meters per second average speed
+      
+      console.log(`📍 Search radius: ${searchRadius}m for ${businessConfig.category} businesses`);
+      
+      // Search for places using Google Places API
+      const placesResponse = await GooglePlacesService.getPlacesInRadius(
+        centerLocation.lat,
+        centerLocation.lng,
+        searchRadius,
+        businessConfig.category,
+        false
+      );
+      
+      console.log(`📊 Found ${placesResponse.places?.length || 0} businesses`);
+      
+      if (!placesResponse.places || placesResponse.places.length === 0) {
+        return { businesses: [], summary: { total: 0, category: businessConfig.category } };
+      }
+      
+      // Filter and sort businesses based on user preferences
+      let filteredBusinesses = placesResponse.places
+        .filter(place => place.rating && place.rating > 0) // Only businesses with ratings
+        .map(place => ({
+          ...place,
+          // Calculate distance from center (approximate) - use coordinates property from backend
+          distance: calculateDistance(
+            centerLocation.lat, centerLocation.lng,
+            place.coordinates?.lat || place.geometry?.location?.lat || place.lat,
+            place.coordinates?.lng || place.geometry?.location?.lng || place.lng
+          )
+        }));
+      
+      // Sort by user preference
+      if (businessConfig.sortBy === 'rating') {
+        filteredBusinesses.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      } else {
+        filteredBusinesses.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+      }
+      
+      // Limit to requested count
+      filteredBusinesses = filteredBusinesses.slice(0, businessConfig.count);
+      
+      console.log(`✅ Filtered to top ${filteredBusinesses.length} businesses`);
+      
+      return {
+        businesses: filteredBusinesses,
+        summary: {
+          total: filteredBusinesses.length,
+          category: businessConfig.category,
+          sortBy: businessConfig.sortBy,
+          searchRadius: searchRadius
+        }
+      };
+      
+    } catch (error) {
+      console.error('Error searching businesses:', error);
+      throw error;
+    }
+  };
+
+  // Helper function to calculate distance between two points
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c * 1000; // Distance in meters
   };
 
   // Handle location search
@@ -372,7 +484,7 @@ function App() {
     }, 200);
   };
 
-  // Generate PDF report
+  // ENHANCED: Generate PDF report with business analysis support
   const handleGeneratePDF = async () => {
     if (!catchmentData || catchmentData.length === 0) {
       alert('No catchment data available to generate PDF');
@@ -435,13 +547,29 @@ function App() {
         }
       }
 
+      // Prepare business data for PDF if available
+      let businessAnalysisData = null;
+      if (searchResultsData && searchResultsData.length > 0 && businessAnalysisParams) {
+        businessAnalysisData = {
+          category: businessAnalysisParams.category || 'business',
+          businesses: searchResultsData,
+          searchParams: businessAnalysisParams
+        };
+        console.log('Including business analysis in PDF:', {
+          category: businessAnalysisData.category,
+          businessCount: businessAnalysisData.businesses.length
+        });
+      }
+
+      // Generate enhanced PDF with business analysis support
       await GooglePlacesService.generateCatchmentReport(
         catchmentData,
         locationName,
-        mapImageUrl
+        mapImageUrl,
+        businessAnalysisData // Pass business data to PDF generation
       );
       
-      console.log('PDF generated successfully');
+      console.log('Enhanced PDF generated successfully');
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Error generating PDF. Please try again.');
@@ -823,6 +951,7 @@ function App() {
           onExportCatchmentExcel={handleExportCatchmentExcel}
           onExportPlacesExcel={handleExportPlacesExcel}
           placesData={searchResultsData}
+          businessData={businessData}
         />
       )}
 

@@ -9,6 +9,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   const selectedLocationGraphic = useRef(null);
   const markersGraphics = useRef([]);
   const catchmentGraphics = useRef([]);
+  const businessGraphics = useRef([]);
   const [currentBasemap, setCurrentBasemap] = useState('gray-vector');
   const [showBasemapGallery, setShowBasemapGallery] = useState(false);
 
@@ -162,6 +163,17 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         graphicsLayer.current.remove(graphic);
       });
       catchmentGraphics.current = [];
+    }
+  };
+
+  // Helper function to clear business markers
+  const clearBusinessMarkers = () => {
+    if (graphicsLayer.current && businessGraphics.current.length > 0) {
+      console.log('Clearing business markers:', businessGraphics.current.length);
+      businessGraphics.current.forEach(graphic => {
+        graphicsLayer.current.remove(graphic);
+      });
+      businessGraphics.current = [];
     }
   };
 
@@ -467,7 +479,156 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         selectedLocationGraphic.current = null;
         markersGraphics.current = [];
         catchmentGraphics.current = [];
+        businessGraphics.current = [];
       }
+    },
+
+    async addBusinessMarkers(businesses) {
+      if (!mapView.current || !graphicsLayer.current) {
+        console.error('Map view or graphics layer not available');
+        return;
+      }
+
+      if (!businesses || businesses.length === 0) {
+        console.warn('No business data provided');
+        return;
+      }
+
+      try {
+        console.log('Adding business markers, count:', businesses.length);
+        
+        const [Graphic, Point, SimpleMarkerSymbol, TextSymbol] = await Promise.all([
+          import('@arcgis/core/Graphic'),
+          import('@arcgis/core/geometry/Point'),
+          import('@arcgis/core/symbols/SimpleMarkerSymbol'),
+          import('@arcgis/core/symbols/TextSymbol')
+        ]);
+
+        // Clear existing business markers
+        clearBusinessMarkers();
+
+        let addedCount = 0;
+
+        for (const business of businesses) {
+          console.log('Processing business:', business.name);
+          console.log('Full business object:', business);
+          
+          // Handle different data structures - backend returns coordinates property
+          let lat, lng;
+          if (business.coordinates && business.coordinates.lat && business.coordinates.lng) {
+            lat = business.coordinates.lat;
+            lng = business.coordinates.lng;
+            console.log('Found coordinates property:', lat, lng);
+          } else if (business.geometry && business.geometry.location) {
+            lat = business.geometry.location.lat;
+            lng = business.geometry.location.lng;
+            console.log('Found geometry.location:', lat, lng);
+          } else if (business.lat && business.lng) {
+            lat = business.lat;
+            lng = business.lng;
+            console.log('Found direct lat/lng:', lat, lng);
+          } else if (business.geometry && business.geometry.lat && business.geometry.lng) {
+            lat = business.geometry.lat;
+            lng = business.geometry.lng;
+            console.log('Found geometry.lat/lng:', lat, lng);
+          } else if (business.location && business.location.lat && business.location.lng) {
+            lat = business.location.lat;
+            lng = business.location.lng;
+            console.log('Found location.lat/lng:', lat, lng);
+          }
+          
+          if (lat && lng) {
+            try {
+              // Create point geometry
+              const point = new Point.default({
+                longitude: lng,
+                latitude: lat,
+                spatialReference: {
+                  wkid: 4326 // WGS84
+                }
+              });
+
+              console.log('Created point for business:', business.name, 'at:', lat, lng);
+
+              // Create marker symbol
+              const markerSymbol = new SimpleMarkerSymbol.default({
+                color: [255, 165, 0, 0.8], // Orange color for business markers
+                size: 10,
+                outline: {
+                  color: [255, 255, 255, 0.8],
+                  width: 1
+                },
+                style: "circle"
+              });
+
+              // Create marker graphic
+              const markerGraphic = new Graphic.default({
+                geometry: point,
+                symbol: markerSymbol,
+                attributes: {
+                  type: 'business-marker',
+                  businessId: business.place_id,
+                  name: business.name,
+                  rating: business.rating,
+                  distance: business.distance
+                }
+              });
+
+              graphicsLayer.current.add(markerGraphic);
+              businessGraphics.current.push(markerGraphic);
+
+              // Add text label with business name and rating
+              const labelSymbol = new TextSymbol.default({
+                color: [0, 0, 0, 0.9],
+                haloColor: [255, 255, 255, 0.8],
+                haloSize: 2,
+                text: `${business.name}\n★${business.rating || 'N/A'}`,
+                xoffset: 0,
+                yoffset: 15, // Offset below the marker
+                font: {
+                  size: 10,
+                  family: "Arial",
+                  weight: "normal"
+                }
+              });
+
+              const labelGraphic = new Graphic.default({
+                geometry: point,
+                symbol: labelSymbol,
+                attributes: {
+                  type: 'business-label',
+                  businessId: business.place_id
+                }
+              });
+
+              graphicsLayer.current.add(labelGraphic);
+              businessGraphics.current.push(labelGraphic);
+              addedCount++;
+
+              console.log(`✅ Successfully added business marker: ${business.name}`);
+
+            } catch (error) {
+              console.error('Error creating marker for business:', business.name, error);
+            }
+          } else {
+            console.warn('Invalid geometry for business:', business.name, 'No valid coordinates found');
+          }
+        }
+
+        console.log(`Successfully added ${addedCount} business markers with ${businessGraphics.current.length} total graphics`);
+
+        // Force map view to update
+        if (mapView.current) {
+          mapView.current.requestUpdate();
+        }
+
+      } catch (error) {
+        console.error('Error adding business markers:', error);
+      }
+    },
+
+    clearBusinessMarkers() {
+      clearBusinessMarkers();
     },
 
     getMapView() {

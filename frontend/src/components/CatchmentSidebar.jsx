@@ -29,6 +29,11 @@ const CatchmentSidebar = ({
   const [driveTimes, setDriveTimes] = useState([10, 20, 30]); // Max 3 catchments
   const [customTime, setCustomTime] = useState('');
   
+  // Business analysis state
+  const [businessCategory, setBusinessCategory] = useState('restaurant');
+  const [businessCount, setBusinessCount] = useState(10);
+  const [sortBy, setSortBy] = useState('distance'); // 'distance' or 'rating'
+  
   // Single base color for all catchments with different opacities
   const [baseColor, setBaseColor] = useState('#729799'); // Base color for all catchments
   
@@ -140,7 +145,13 @@ const radiusOptions = [
         travelMode,
         driveTimes,
         showDemographics: true, // Always include demographic data
-        colors: getCatchmentColors() // Pass the generated colors
+        colors: getCatchmentColors(), // Pass the generated colors
+        // Business analysis parameters
+        businessAnalysis: {
+          category: businessCategory,
+          count: businessCount,
+          sortBy: sortBy
+        }
       });
     }
   };
@@ -330,6 +341,60 @@ const radiusOptions = [
                 >
                   {driveTimes.length >= 3 ? 'Max' : 'Add'}
                 </button>
+              </div>
+            </div>
+
+            {/* Business Analysis Section */}
+            <div style={styles.businessSection}>
+              <h4 style={styles.sectionTitle}>
+                🏪 Business Analysis
+              </h4>
+              
+              <div style={styles.formRow}>
+                <label style={styles.label}>Business Category:</label>
+                <select
+                  value={businessCategory}
+                  onChange={(e) => setBusinessCategory(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="restaurant">🍽️ Restaurant</option>
+                  <option value="supermarket">🛒 Supermarket</option>
+                  <option value="retail">👕 Retail</option>
+                  <option value="pharmacy">💊 Pharmacy</option>
+                  <option value="bank">🏦 Bank</option>
+                  <option value="gas_station">⛽ Gas Station</option>
+                  <option value="hospital">🏥 Hospital</option>
+                  <option value="school">🏫 School</option>
+                  <option value="gym">💪 Gym</option>
+                  <option value="hotel">🏨 Hotel</option>
+                </select>
+              </div>
+
+              <div style={styles.formRow}>
+                <div style={styles.halfWidth}>
+                  <label style={styles.label}>Show Top:</label>
+                  <select
+                    value={businessCount}
+                    onChange={(e) => setBusinessCount(parseInt(e.target.value))}
+                    style={styles.select}
+                  >
+                    <option value={5}>5 businesses</option>
+                    <option value={10}>10 businesses</option>
+                    <option value={15}>15 businesses</option>
+                    <option value={20}>20 businesses</option>
+                  </select>
+                </div>
+                <div style={styles.halfWidth}>
+                  <label style={styles.label}>Sort by:</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    style={styles.select}
+                  >
+                    <option value="distance">📍 Nearest</option>
+                    <option value="rating">⭐ Best Rating</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -699,12 +764,14 @@ const styles = {
   },
   select: {
     padding: '8px 12px',
-    border: '1px solid rgba(255,255,255,0.3)',
+    border: '1px solid #032842',
     borderRadius: '4px',
     fontSize: '13px',
     outline: 'none',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    color: 'white'
+    backgroundColor: '#032842',
+    color: 'white',
+    appearance: 'menulist',
+    cursor: 'pointer'
   },
   checkbox: {
     cursor: 'pointer'
@@ -1502,6 +1569,27 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '8px'
+  },
+  // Business analysis styles
+  businessSection: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: '6px',
+    margin: '6px',
+    padding: '12px',
+    marginBottom: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    border: '1px solid rgba(255,255,255,0.1)'
+  },
+  formRow: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '8px'
+  },
+  halfWidth: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
   }
 };
 

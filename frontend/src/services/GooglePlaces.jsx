@@ -173,32 +173,50 @@ const GooglePlacesService = {
         }
     },
 
-    // Generate PDF report
-    async generateCatchmentReport(catchmentData, address, imageUrl) {
-        console.log('Generating catchment report:', { catchmentData, address });
+    // ENHANCED: Generate PDF report with business analysis support
+    async generateCatchmentReport(catchmentData, address, imageUrl, businessData = null) {
+        console.log('Generating enhanced catchment report:', { 
+            catchmentData: catchmentData?.length, 
+            address, 
+            hasBusinessData: !!businessData 
+        });
+        
         try {
-            const response = await axios.post(`${BASE_URL}/generate-catchment-report`, {
+            const requestData = {
                 catchmentData,
                 address,
                 imageUrl,
                 timestamp: new Date().toISOString()
-            }, {
+            };
+
+            // Include business data if provided
+            if (businessData && businessData.businesses && businessData.businesses.length > 0) {
+                requestData.businessData = businessData;
+                console.log('Including business analysis data:', {
+                    category: businessData.category,
+                    businessCount: businessData.businesses.length
+                });
+            }
+
+            const response = await axios.post(`${BASE_URL}/generate-catchment-report`, requestData, {
                 responseType: 'blob' // Important for PDF download
             });
             
-            // Create download link
+            // Create download link with enhanced filename
+            const reportType = businessData ? 'Catchment_Business_Analysis' : 'Catchment';
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `CBRE_Catchment_${Date.now()}.pdf`);
+            link.setAttribute('download', `CBRE_${reportType}_${Date.now()}.pdf`);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
             
+            console.log('Enhanced PDF report generated successfully');
             return { success: true };
         } catch (error) {
-            console.error('Error generating report:', error);
+            console.error('Error generating enhanced report:', error);
             throw error;
         }
     },
@@ -256,6 +274,33 @@ const GooglePlacesService = {
             return { success: true };
         } catch (error) {
             console.error('Error exporting catchment to Excel:', error);
+            throw error;
+        }
+    },
+
+    // NEW: Export detailed sector analysis to CSV
+    async exportDetailedSectorsCSV(catchmentData) {
+        console.log('Exporting detailed sectors CSV:', { catchmentCount: catchmentData?.length });
+        try {
+            const response = await axios.post(`${BASE_URL}/export-sectors-csv`, {
+                catchmentData
+            }, {
+                responseType: 'blob' // Important for CSV download
+            });
+            
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `CBRE_Detailed_Sectors_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Error exporting detailed sectors CSV:', error);
             throw error;
         }
     },

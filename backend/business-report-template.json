@@ -1,0 +1,58 @@
+{
+  "template": {
+    "name": "catchment_with_business_analysis",
+    "shortid": "business-catchment-template",
+    "engine": "handlebars",
+    "recipe": "chrome-pdf"
+  },
+  "data": {
+    "date": "15/09/2024",
+    "url": "https://via.placeholder.com/800x400/007bff/ffffff?text=Catchment+Analysis+Map",
+    "defaultBreaks": [
+      {
+        "name": "15 minutes",
+        "totalPopulation": 45000,
+        "pourcentMan": 49,
+        "pourcentWomen": 51,
+        "pourcentAge0014": 17,
+        "pourcentAge1529": 18,
+        "pourcentAge3044": 20,
+        "pourcentAge4559": 21,
+        "pourcentAge60PL": 24,
+        "totalHouseHolds": 19565,
+        "householdsMember": 2.3,
+        "totalMIO": "920 mio €",
+        "purchasePowerPerson": "20635"
+      }
+    ],
+    "businessAnalysis": {
+      "category": "restaurant",
+      "totalBusinesses": 25,
+      "averageRating": 4.2,
+      "topBusinesses": [
+        {
+          "name": "Le Bistro Central",
+          "rating": 4.8,
+          "reviewCount": 245,
+          "priceLevel": 3,
+          "distance": 450,
+          "address": "Rue de la Loi 123, Brussels"
+        },
+        {
+          "name": "Pizza Roma",
+          "rating": 4.5,
+          "reviewCount": 189,
+          "priceLevel": 2,
+          "distance": 680,
+          "address": "Avenue Louise 456, Brussels"
+        }
+      ],
+      "categoryAnalysis": {
+        "marketSaturation": "Medium",
+        "averageDistance": 750,
+        "competitionLevel": "Moderate",
+        "marketOpportunity": "Good"
+      }
+    }
+  }
+}
