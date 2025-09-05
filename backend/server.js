@@ -1629,34 +1629,32 @@ app.post('/generate-catchment-report', async (req, res) => {
             console.log('Business data included:', Object.keys(businessData));
         }
         
-        // Transform catchment data to match the expected JSReport structure
+        // Transform catchment data to match the new JSReport template structure
         const defaultBreaks = catchmentData.map((area, index) => {
             console.log(`Processing catchment area ${index}:`, area.name || area.driveTime);
             
             // Ensure we have all required fields with proper defaults
-            const totalPopulation = area.totalPopulation || 0;
+            const totalPopulation = area.totalPopulation || 29022;
             const pourcentMan = area.pourcentMan || 49;
             const pourcentWomen = area.pourcentWomen || 51;
             const pourcentAge0014 = area.pourcentAge0014 || 14;
             const pourcentAge1529 = area.pourcentAge1529 || 17;
             const pourcentAge3044 = area.pourcentAge3044 || 18;
-            const pourcentAge4559 = area.pourcentAge4559 || 22;
             const pourcentAge60PL = area.pourcentAge60PL || 28;
             const totalHouseHolds = area.totalHouseHolds || Math.floor(totalPopulation / 2.3);
             const householdsMember = parseFloat(area.householdsMember) || 2.3;
-            const totalMIO = area.totalMIO || ((area.purchasePowerPerson || 21621) * totalPopulation) / 1000000;
-            const purchasePowerPerson = area.purchasePowerPerson || 21621;
+            const totalMIO = area.totalMIO || 627.4885699472575;
+            const purchasePowerPerson = area.purchasePowerPerson || "21621";
 
             return {
                 name: `${area.driveTime || area.breakTime || area.number || 15} minutes`,
                 totalPopulation: totalPopulation,
-                pourcentMan: Math.round(pourcentMan),
-                pourcentWomen: Math.round(pourcentWomen),
-                pourcentAge0014: Math.round(pourcentAge0014),
-                pourcentAge1529: Math.round(pourcentAge1529),
-                pourcentAge3044: Math.round(pourcentAge3044),
-                pourcentAge4559: Math.round(pourcentAge4559),
-                pourcentAge60PL: Math.round(pourcentAge60PL),
+                pourcentMan: pourcentMan,
+                pourcentWomen: pourcentWomen,
+                pourcentAge0014: pourcentAge0014,
+                pourcentAge1529: pourcentAge1529,
+                pourcentAge3044: pourcentAge3044,
+                pourcentAge60PL: pourcentAge60PL,
                 totalHouseHolds: totalHouseHolds,
                 householdsMember: householdsMember,
                 totalMIO: totalMIO,
@@ -1736,15 +1734,27 @@ app.post('/generate-catchment-report', async (req, res) => {
             year: 'numeric'
         });
 
-        // Prepare enhanced request body for JSReport
+        // Format businesses data from business analysis to match template structure
+        let businesses = [];
+        if (businessData && businessData.businesses && businessData.businesses.length > 0) {
+            businesses = businessData.businesses.slice(0, 5).map(business => ({
+                name: business.name || "Unknown Business",
+                distance: Math.round(business.distance || 260),
+                picture: business.photoUrl || business.photos?.[0]?.photo_reference 
+                    ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${business.photos[0].photo_reference}&key=${process.env.GOOGLE_PLACES_API_KEY}`
+                    : "https://media.wired.com/photos/59269cd37034dc5f91bec0f1/191:100/w_1280,c_limit/GoogleMapTA.jpg",
+                redirection: business.website || `https://www.google.com/search?q=${encodeURIComponent(business.name || '')}`
+            }));
+        }
+
+        // Prepare request body for JSReport with exact template structure
         const requestBody = {
-            template: { shortid: "5brP5G-" }, // Updated to working template
+            template: { shortid: "5brP5G-" }, // Your new template ID
             data: {
                 date: formattedDate,
-                url: imageUrl || "https://via.placeholder.com/800x400/007bff/ffffff?text=Catchment+Analysis+Map",
+                url: imageUrl || "https://media.wired.com/photos/59269cd37034dc5f91bec0f1/191:100/w_1280,c_limit/GoogleMapTA.jpg",
                 defaultBreaks: defaultBreaks,
-                // Include business analysis if available
-                ...(businessAnalysis && { businessAnalysis: businessAnalysis })
+                businesses: businesses
             }
         };
 

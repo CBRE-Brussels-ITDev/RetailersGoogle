@@ -287,15 +287,32 @@ function App() {
       const searchRadius = maxBreakTime * 60 * 20; // Approximate: 20 meters per second average speed
       
       console.log(`📍 Search radius: ${searchRadius}m for ${businessConfig.category} businesses`);
+      console.log(`🔍 Search type: ${businessConfig.isNameSearch ? 'Name-based' : 'Category-based'}`);
       
-      // Search for places using Google Places API
-      const placesResponse = await GooglePlacesService.getPlacesInRadius(
-        centerLocation.lat,
-        centerLocation.lng,
-        searchRadius,
-        businessConfig.category,
-        false
-      );
+      // Choose appropriate search method based on search type
+      let placesResponse;
+      if (businessConfig.isNameSearch && businessConfig.businessName) {
+        // Use text search for business names
+        console.log(`🏷️ Searching by business name: "${businessConfig.businessName}"`);
+        placesResponse = await GooglePlacesService.getPlacesByTextSearch(
+          centerLocation.lat,
+          centerLocation.lng,
+          searchRadius,
+          businessConfig.businessName
+        );
+      } else if (businessConfig.category) {
+        // Use category search for predefined types
+        console.log(`📂 Searching by category: "${businessConfig.category}"`);
+        placesResponse = await GooglePlacesService.getPlacesInRadius(
+          centerLocation.lat,
+          centerLocation.lng,
+          searchRadius,
+          businessConfig.category,
+          false
+        );
+      } else {
+        placesResponse = { places: [] };
+      }
       
       console.log(`📊 Found ${placesResponse.places?.length || 0} businesses`);
       
@@ -422,9 +439,12 @@ function App() {
     setSelectedAddress(''); // Clear the address as well
     setCatchmentData([]);
     setShowCatchmentResults(false);
+    setBusinessData(null); // Clear business data
     if (mapRef.current) {
       mapRef.current.clearCircle();
       mapRef.current.clearCatchments();
+      mapRef.current.clearBusinessMarkers(); // Clear business markers
+      mapRef.current.clearAll(); // Clear all graphics including user's location dot
     }
   };
 
@@ -549,15 +569,16 @@ function App() {
 
       // Prepare business data for PDF if available
       let businessAnalysisData = null;
-      if (searchResultsData && searchResultsData.length > 0 && businessAnalysisParams) {
+      if (businessData && businessData.businesses && businessData.businesses.length > 0) {
         businessAnalysisData = {
-          category: businessAnalysisParams.category || 'business',
-          businesses: searchResultsData,
-          searchParams: businessAnalysisParams
+          category: businessData.summary?.category || 'business',
+          businesses: businessData.businesses,
+          searchParams: businessData.summary || {}
         };
         console.log('Including business analysis in PDF:', {
           category: businessAnalysisData.category,
-          businessCount: businessAnalysisData.businesses.length
+          businessCount: businessAnalysisData.businesses.length,
+          summary: businessData.summary
         });
       }
 

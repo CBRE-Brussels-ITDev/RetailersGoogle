@@ -29,8 +29,9 @@ const CatchmentSidebar = ({
   const [driveTimes, setDriveTimes] = useState([10, 20, 30]); // Max 3 catchments
   const [customTime, setCustomTime] = useState('');
   
-  // Business analysis state
+  // Business analysis state - UPDATED: Support name search
   const [businessCategory, setBusinessCategory] = useState('restaurant');
+  const [businessNameSearch, setBusinessNameSearch] = useState(''); // For name-based search
   const [businessCount, setBusinessCount] = useState(10);
   const [sortBy, setSortBy] = useState('distance'); // 'distance' or 'rating'
   
@@ -141,14 +142,20 @@ const radiusOptions = [
   const handleCatchmentSubmit = (e) => {
     e.preventDefault();
     if (onCatchmentCalculate) {
+      // Determine search type and value
+      const searchValue = businessNameSearch.trim() || businessCategory;
+      const isNameSearch = businessNameSearch.trim().length > 0;
+      
       onCatchmentCalculate({
         travelMode,
         driveTimes,
         showDemographics: true, // Always include demographic data
         colors: getCatchmentColors(), // Pass the generated colors
-        // Business analysis parameters
+        // Enhanced business analysis parameters
         businessAnalysis: {
           category: businessCategory,
+          businessName: businessNameSearch.trim(),
+          isNameSearch: isNameSearch,
           count: businessCount,
           sortBy: sortBy
         }
@@ -274,7 +281,7 @@ const radiusOptions = [
               </div>
             </div>
 
-            {/* Drive Times with Inline Color Picker */}
+            {/* Drive Times with Inline Color Picker - UPDATED: ONE ROW LAYOUT */}
             <div style={styles.formGroup}>
               <div style={styles.driveTimeHeader}>
                 <label style={styles.label}>Drive Times (max 3):</label>
@@ -291,9 +298,10 @@ const radiusOptions = [
                 </div>
               </div>
 
-              <div style={styles.scrollableTimeContainer} className="scrollable-time-container">
+              {/* Drive Times in ONE ROW */}
+              <div style={styles.timeChipsRow}>
                 {driveTimes.map((time, index) => (
-                  <div key={time} style={styles.timeChipWrapper}>
+                  <div key={time} style={styles.timeChipInline}>
                     <div style={{
                       ...styles.timeChip,
                       backgroundColor: getCatchmentColor(index)
@@ -309,8 +317,8 @@ const radiusOptions = [
                         </button>
                       )}
                     </div>
-                    <span style={styles.opacityLabel}>
-                      {index === 0 ? '100%' : index === 1 ? '70%' : '40%'} opacity
+                    <span style={styles.opacityLabelInline}>
+                      {index === 0 ? '100%' : index === 1 ? '70%' : '40%'}
                     </span>
                   </div>
                 ))}
@@ -344,22 +352,51 @@ const radiusOptions = [
               </div>
             </div>
 
-            {/* Business Analysis Section */}
+            {/* Business Analysis Section - UPDATED: ADD NAME SEARCH */}
             <div style={styles.businessSection}>
               <h4 style={styles.sectionTitle}>
                 🏪 Business Analysis
               </h4>
+              
+              {/* Business Name Search */}
+              <div style={styles.formRow}>
+                <div style={styles.fullWidth}>
+                  <label style={styles.label}>Search by Business Name:</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., McDonald's, Starbucks, Carrefour..."
+                    style={styles.businessNameInput}
+                    onChange={(e) => setBusinessNameSearch(e.target.value)}
+                    value={businessNameSearch}
+                  />
+                  <div style={styles.searchHint}>
+                    💡 Enter a specific business name or leave empty to search by category below
+                  </div>
+                </div>
+              </div>
+
+              {/* OR Divider */}
+              <div style={styles.orDivider}>
+                <div style={styles.orLine}></div>
+                <span style={styles.orText}>OR</span>
+                <div style={styles.orLine}></div>
+              </div>
               
               <div style={styles.formRow}>
                 <label style={styles.label}>Business Category:</label>
                 <select
                   value={businessCategory}
                   onChange={(e) => setBusinessCategory(e.target.value)}
-                  style={styles.select}
+                  style={{
+                    ...styles.select,
+                    opacity: businessNameSearch ? 0.5 : 1
+                  }}
+                  disabled={businessNameSearch && businessNameSearch.trim().length > 0}
                 >
+                  <option value="">Select a category...</option>
                   <option value="restaurant">🍽️ Restaurant</option>
                   <option value="supermarket">🛒 Supermarket</option>
-                  <option value="retail">👕 Retail</option>
+                  <option value="store">🏪 Retail Store</option>
                   <option value="pharmacy">💊 Pharmacy</option>
                   <option value="bank">🏦 Bank</option>
                   <option value="gas_station">⛽ Gas Station</option>
@@ -367,7 +404,15 @@ const radiusOptions = [
                   <option value="school">🏫 School</option>
                   <option value="gym">💪 Gym</option>
                   <option value="hotel">🏨 Hotel</option>
+                  <option value="shopping_mall">🛍️ Shopping Mall</option>
+                  <option value="cafe">☕ Cafe</option>
+                  <option value="bakery">🥖 Bakery</option>
                 </select>
+                {businessNameSearch && (
+                  <div style={styles.searchHint}>
+                    Category disabled when searching by name
+                  </div>
+                )}
               </div>
 
               <div style={styles.formRow}>
@@ -398,17 +443,19 @@ const radiusOptions = [
               </div>
             </div>
 
-            {/* Calculate Button */}
+            {/* Calculate Button - UPDATED: PROPER DISABLED STYLING */}
             <button
               type="submit"
               disabled={!selectedLocation || isLoading || driveTimes.length === 0}
               className="calculate-catchment-button"
               style={{
                 ...styles.calculateButton,
-                ...((!selectedLocation || isLoading || driveTimes.length === 0) ? styles.disabledButton : {})
+                ...((!selectedLocation || isLoading || driveTimes.length === 0) ? styles.calculateButtonDisabled : {})
               }}
             >
-              {isLoading ? 'Calculating...' : 'Calculate Catchment'}
+              {!selectedLocation ? 'Select a location on the map' : 
+               isLoading ? 'Calculating...' : 
+               'Calculate Catchment'}
             </button>
           </form>
 
@@ -805,17 +852,85 @@ const styles = {
     fontSize: '11px',
     fontWeight: '500'
   },
-  timeChips: {
+  timeChipsRow: {
     display: 'flex',
-    flexWrap: 'wrap',
     gap: '8px',
-    marginBottom: '10px'
+    marginBottom: '10px',
+    flexWrap: 'wrap'
   },
-  timeChipsContainer: {
+  timeChipInline: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
-    marginBottom: '10px'
+    alignItems: 'center',
+    gap: '4px'
+  },
+  timeChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 10px',
+    backgroundColor: '#17E88F',
+    color: '#032842',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: '500',
+    minWidth: '60px',
+    justifyContent: 'center'
+  },
+  opacityLabelInline: {
+    fontSize: '9px',
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500',
+    textAlign: 'center'
+  },
+  businessNameInput: {
+    padding: '8px 12px',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '4px',
+    fontSize: '13px',
+    outline: 'none',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: 'white',
+    width: '100%',
+    marginTop: '4px'
+  },
+  searchHint: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: '4px',
+    fontStyle: 'italic'
+  },
+  orDivider: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: '12px 0',
+    gap: '8px'
+  },
+  orLine: {
+    flex: 1,
+    height: '1px',
+    backgroundColor: 'rgba(255,255,255,0.3)'
+  },
+  orText: {
+    fontSize: '11px',
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500',
+    padding: '0 4px'
+  },
+  fullWidth: {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+  calculateButtonDisabled: {
+    background: 'linear-gradient(135deg, #6c757d 0%, #5a6268 100%) !important',
+    borderColor: '#6c757d !important',
+    cursor: 'not-allowed !important',
+    boxShadow: 'none !important',
+    opacity: '0.7 !important',
+    color: 'rgba(255,255,255,0.7) !important'
   },
   driveTimeHeader: {
     display: 'flex',

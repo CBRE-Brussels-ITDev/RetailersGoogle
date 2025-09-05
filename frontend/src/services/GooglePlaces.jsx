@@ -79,7 +79,35 @@ const GooglePlacesService = {
             throw error;
         }
     },
-    async getPlacesInRadius(lat, lng, radius, category = null, getAllSectors = false) {
+
+    // Text search for business names (like "Carrefour", "McDonald's", etc.)
+    async getPlacesByTextSearch(lat, lng, radius, query) {
+        console.log('Fetching places by text search:', { lat, lng, radius, query });
+        try {
+            const requestBody = {
+                lat,
+                lng,
+                radius,
+                query
+            };
+
+            const response = await axios.post(`${BASE_URL}/get-all-places-text-search`, requestBody);
+            
+            console.log('Text search response:', response.data);
+            return {
+                placeIds: response.data.placeIds || [],
+                places: response.data.places || [],
+                totalFound: response.data.totalFound || 0,
+                searchTypes: ['text_search'],
+                searchParams: response.data.searchParams || {}
+            };
+        } catch (error) {
+            console.error('Error fetching places by text search:', error);
+            throw error;
+        }
+    },
+
+    async getPlacesInRadius(center, radius, type, pageToken = null) {
         console.log('Fetching places in radius:', { lat, lng, radius, category, getAllSectors });
         try {
             const requestBody = {
