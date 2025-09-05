@@ -1752,6 +1752,7 @@ app.post('/generate-catchment-report', async (req, res) => {
             template: { shortid: "5brP5G-" }, // Your new template ID
             data: {
                 date: formattedDate,
+                name: address || "Selected Location", // Add the street address as name
                 url: imageUrl || "https://media.wired.com/photos/59269cd37034dc5f91bec0f1/191:100/w_1280,c_limit/GoogleMapTA.jpg",
                 defaultBreaks: defaultBreaks,
                 businesses: businesses
