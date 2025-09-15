@@ -1,13 +1,5 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Large data files - DO NOT COMMIT
-**/DATA*.json
-backend/data/
-data/
-*.json
-!package*.json
-!*config*.json
-
 # dependencies
 /node_modules
 /.pnp
