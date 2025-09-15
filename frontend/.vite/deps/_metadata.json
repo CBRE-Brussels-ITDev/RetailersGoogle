@@ -1,0 +1,82 @@
+{
+  "hash": "b9bfbd5e",
+  "configHash": "f8335ca6",
+  "lockfileHash": "f5f6a428",
+  "browserHash": "e68c287f",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "f73830db",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "c256798d",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "e60f3712",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "58f080f0",
+      "needsInterop": true
+    },
+    "axios": {
+      "src": "../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "67d93e78",
+      "needsInterop": false
+    },
+    "chart.js": {
+      "src": "../../node_modules/chart.js/dist/chart.js",
+      "file": "chart__js.js",
+      "fileHash": "a528a0d0",
+      "needsInterop": false
+    },
+    "file-saver": {
+      "src": "../../node_modules/file-saver/dist/FileSaver.min.js",
+      "file": "file-saver.js",
+      "fileHash": "666eae34",
+      "needsInterop": true
+    },
+    "react-chartjs-2": {
+      "src": "../../node_modules/react-chartjs-2/dist/index.js",
+      "file": "react-chartjs-2.js",
+      "fileHash": "74b6a9af",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "4d0f842c",
+      "needsInterop": true
+    },
+    "xlsx": {
+      "src": "../../node_modules/xlsx/xlsx.mjs",
+      "file": "xlsx.js",
+      "fileHash": "bd9c080b",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-5IDREJNQ": {
+      "file": "chunk-5IDREJNQ.js"
+    },
+    "chunk-U5G3TOY2": {
+      "file": "chunk-U5G3TOY2.js"
+    },
+    "chunk-6GAV2S6I": {
+      "file": "chunk-6GAV2S6I.js"
+    },
+    "chunk-DC5AMYBS": {
+      "file": "chunk-DC5AMYBS.js"
+    }
+  }
+}

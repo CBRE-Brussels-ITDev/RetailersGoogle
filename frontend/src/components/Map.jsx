@@ -1,7 +1,7 @@
 import { useImperativeHandle, forwardRef, useRef, useEffect, useState } from 'react';
 import { getCategoryColor, getCategoryEmoji } from './CategoryIcons';
 
-const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData, onClearAll }, ref) => {
+const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResults, searchResultsData, onClearAll, buildings, radius, mode }, ref) => {
   const mapDiv = useRef(null);
   const mapView = useRef(null);
   const graphicsLayer = useRef(null);
@@ -10,6 +10,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
   const markersGraphics = useRef([]);
   const catchmentGraphics = useRef([]);
   const businessGraphics = useRef([]);
+  const buildingGraphics = useRef([]);
   const [currentBasemap, setCurrentBasemap] = useState('gray-vector');
   const [showBasemapGallery, setShowBasemapGallery] = useState(false);
 
@@ -126,13 +127,25 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
               // If no marker was clicked, treat as map click
               console.log('No marker clicked, calling map click handler');
               if (onMapClick) {
-                onMapClick(latitude, longitude);
+                if (mode === 'residential') {
+                  // For residential mode, pass the event object with mapPoint
+                  onMapClick(event);
+                } else {
+                  // For other modes, use the old format
+                  onMapClick(latitude, longitude);
+                }
               }
             }).catch((error) => {
               console.error('Hit test error:', error);
               // Fallback to map click if hit test fails
               if (onMapClick) {
-                onMapClick(latitude, longitude);
+                if (mode === 'residential') {
+                  // For residential mode, pass the event object with mapPoint
+                  onMapClick(event);
+                } else {
+                  // For other modes, use the old format
+                  onMapClick(latitude, longitude);
+                }
               }
             });
           });
@@ -154,6 +167,17 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
       }
     };
   }, []); // Remove onMapClick dependency to prevent re-initialization
+
+  // Helper function to clear building markers
+  const clearBuildingMarkers = () => {
+    if (graphicsLayer.current && buildingGraphics.current.length > 0) {
+      console.log('Clearing building markers:', buildingGraphics.current.length);
+      buildingGraphics.current.forEach(graphic => {
+        graphicsLayer.current.remove(graphic);
+      });
+      buildingGraphics.current = [];
+    }
+  };
 
   // Helper function to clear catchment polygons
   const clearCatchmentPolygons = () => {
@@ -480,6 +504,7 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
         markersGraphics.current = [];
         catchmentGraphics.current = [];
         businessGraphics.current = [];
+        buildingGraphics.current = [];
       }
     },
 
@@ -628,7 +653,179 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     },
 
     clearBusinessMarkers() {
-      clearBusinessMarkers();
+      if (businessGraphics.current.length > 0) {
+        businessGraphics.current.forEach(graphic => {
+          graphicsLayer.current.remove(graphic);
+        });
+        businessGraphics.current = [];
+      }
+    },
+
+    async addRadiusCircle(center, radius_km = 1.0) {
+      if (!mapView.current || !graphicsLayer.current) return;
+
+      try {
+        const [Graphic, Point, Polygon, SimpleFillSymbol, SimpleLineSymbol] = await Promise.all([
+          import('@arcgis/core/Graphic'),
+          import('@arcgis/core/geometry/Point'),
+          import('@arcgis/core/geometry/Polygon'),
+          import('@arcgis/core/symbols/SimpleFillSymbol'),
+          import('@arcgis/core/symbols/SimpleLineSymbol')
+        ]);
+
+        // Remove existing circle
+        if (circleGraphic.current) {
+          graphicsLayer.current.remove(circleGraphic.current);
+        }
+
+        // Create circle geometry (approximation using polygon)
+        const centerPoint = new Point.default({
+          longitude: center.lng,
+          latitude: center.lat,
+          spatialReference: {
+            wkid: 4326 // WGS84 for decimal degree coordinates
+          }
+        });
+
+        // Create circle polygon with radius in kilometers
+        const circle = await createCirclePolygon(centerPoint, radius_km * 1000); // Convert to meters
+
+        // Create circle symbol
+        const circleSymbol = new SimpleFillSymbol.default({
+          color: [0, 123, 255, 0.15], // Blue with transparency
+          outline: new SimpleLineSymbol.default({
+            color: [0, 123, 255, 0.8],
+            width: 2
+          })
+        });
+
+        // Create circle graphic
+        circleGraphic.current = new Graphic.default({
+          geometry: circle,
+          symbol: circleSymbol,
+          attributes: {
+            type: 'radius-circle',
+            radius_km: radius_km
+          }
+        });
+
+        graphicsLayer.current.add(circleGraphic.current);
+        console.log(`Added radius circle with ${radius_km}km radius`);
+
+      } catch (error) {
+        console.error('Error adding radius circle:', error);
+      }
+    },
+
+    async addBuildingMarkers(buildings) {
+      if (!mapView.current || !graphicsLayer.current) {
+        console.error('Map view or graphics layer not available');
+        return;
+      }
+
+      if (!buildings || buildings.length === 0) {
+        console.warn('No building data provided');
+        return;
+      }
+
+      try {
+        console.log('Adding building markers, count:', buildings.length);
+        
+        const [Graphic, Point, SimpleMarkerSymbol] = await Promise.all([
+          import('@arcgis/core/Graphic'),
+          import('@arcgis/core/geometry/Point'),
+          import('@arcgis/core/symbols/SimpleMarkerSymbol')
+        ]);
+
+        // Clear existing building markers
+        clearBuildingMarkers();
+
+        let addedCount = 0;
+
+        for (const building of buildings) {
+          const lat = building.latitude;
+          const lng = building.longitude;
+          
+          if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+            try {
+              // Create point geometry
+              const point = new Point.default({
+                longitude: lng,
+                latitude: lat,
+                spatialReference: {
+                  wkid: 4326 // WGS84
+                }
+              });
+
+              // Create marker symbol - different colors for different property types
+              let markerColor = [33, 150, 243, 0.8]; // Default blue
+              
+              // Color coding based on operation type
+              if (building.operation === 's' || building.Operation === 's') {
+                markerColor = [76, 175, 80, 0.8]; // Green for sale
+              } else if (building.operation === 'r' || building.Operation === 'r') {
+                markerColor = [255, 152, 0, 0.8]; // Orange for rent
+              }
+
+              const markerSymbol = new SimpleMarkerSymbol.default({
+                color: markerColor,
+                size: 6, // Small dots
+                outline: {
+                  color: [255, 255, 255, 0.8],
+                  width: 1
+                },
+                style: "circle"
+              });
+
+              // Create marker graphic
+              const markerGraphic = new Graphic.default({
+                geometry: point,
+                symbol: markerSymbol,
+                attributes: {
+                  type: 'building-marker',
+                  buildingId: building.id,
+                  address: building.address,
+                  price: building.price,
+                  size: building.size,
+                  rooms: building.rooms,
+                  operation: building.operation || building.Operation,
+                  usage: building.usage || building.Usage,
+                  distance: building.distance
+                }
+              });
+
+              graphicsLayer.current.add(markerGraphic);
+              buildingGraphics.current.push(markerGraphic);
+              addedCount++;
+
+            } catch (error) {
+              console.error('Error creating marker for building:', building.id, error);
+            }
+          } else {
+            console.warn('Invalid coordinates for building:', building.id, 'lat:', lat, 'lng:', lng);
+          }
+        }
+
+        console.log(`Successfully added ${addedCount} building markers`);
+
+        // Force map view to update
+        if (mapView.current) {
+          mapView.current.requestUpdate();
+        }
+
+      } catch (error) {
+        console.error('Error adding building markers:', error);
+      }
+    },
+
+    clearBuildingMarkers() {
+      if (graphicsLayer.current && buildingGraphics.current.length > 0) {
+        console.log('Clearing building markers:', buildingGraphics.current.length);
+        buildingGraphics.current.forEach(graphic => {
+          graphicsLayer.current.remove(graphic);
+        });
+        buildingGraphics.current = [];
+      }
     },
 
     getMapView() {
@@ -886,11 +1083,35 @@ const Map = forwardRef(({ onPlaceClick, onMapClick, selectedLocation, searchResu
     updateMarkers();
   }, [selectedLocation, searchResultsData]);
 
+  // Update residential mode markers and circle
+  useEffect(() => {
+    const updateResidentialMode = async () => {
+      if (mode === 'residential') {
+        // Add radius circle if we have a selected location
+        if (selectedLocation && radius) {
+          if (mapView.current && ref.current) {
+            await ref.current.addRadiusCircle(selectedLocation, radius.radius);
+          }
+        }
+        
+        // Add building markers if we have buildings data
+        if (buildings && buildings.length > 0) {
+          if (mapView.current && ref.current) {
+            await ref.current.addBuildingMarkers(buildings);
+          }
+        }
+      }
+    };
+
+    updateResidentialMode();
+  }, [mode, buildings, selectedLocation, radius]);
+
   // Clean up on unmount
   useEffect(() => {
     return () => {
       clearMarkers();
       clearSelectedLocation();
+      clearBuildingMarkers();
       if (circleGraphic.current && graphicsLayer.current) {
         graphicsLayer.current.remove(circleGraphic.current);
       }

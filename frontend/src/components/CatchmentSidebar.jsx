@@ -17,7 +17,15 @@ const CatchmentSidebar = ({
   catchmentData,
   onClearAll,
   onToggleMode,
-  onShowCommerceAnalysis  // New prop for commerce analysis
+  onShowCommerceAnalysis,  // New prop for commerce analysis
+  currentView,             // New prop for current view mode
+  onViewChange,            // New prop for changing view mode
+  residentialBuildings,    // New prop for residential buildings
+  residentialAnalysis,     // New prop for residential analysis
+  residentialRadius,       // New prop for residential radius
+  onResidentialExport,     // New prop for residential export
+  onResidentialAnalyze,    // New prop for manual residential analysis trigger
+  onResidentialRadiusChange // New prop for radius change
 }) => {
   // Places search form state
   const [radius, setRadius] = useState('1000');
@@ -251,8 +259,158 @@ const radiusOptions = [
 
         {/* Scrollable Content Area */}
         <div style={styles.scrollableContent} className="sidebar-scrollable-content">
-          {/* Content based on mode */}
-          {showCatchmentMode ? (
+          {/* Content based on view mode */}
+          {currentView === 'residential' ? (
+            // RESIDENTIAL MODE
+            <div style={styles.searchSection}>
+              <h5 style={styles.sectionTitle}>
+                🏠 Residential Market Analysis
+              </h5>
+              
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Analysis Radius:</label>
+                <div style={styles.radiusControl}>
+                  <input 
+                    type="number" 
+                    min="0.1" 
+                    max="5" 
+                    step="0.1"
+                    value={residentialRadius?.radius || 1}
+                    onChange={(e) => onResidentialRadiusChange && onResidentialRadiusChange({
+                      radius: parseFloat(e.target.value),
+                      unit: 'km'
+                    })}
+                    style={styles.numberInput}
+                  />
+                  <span style={styles.unitLabel}>km</span>
+                </div>
+              </div>
+
+              {selectedLocation && (
+                <div style={styles.instructionBox}>
+                  <p style={styles.instructionText}>
+                    📍 Location selected: {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
+                  </p>
+                  <p style={styles.instructionText}>
+                    🗺️ Click anywhere on the map to analyze residential buildings within {residentialRadius?.radius || 1}km radius.
+                  </p>
+                  
+                  {/* Manual Launch Button */}
+                  <button
+                    onClick={() => onResidentialAnalyze && onResidentialAnalyze(selectedLocation.lat, selectedLocation.lng)}
+                    style={styles.launchButton}
+                  >
+                    🚀 Launch Analysis
+                  </button>
+                </div>
+              )}
+
+              {!selectedLocation && (
+                <div style={styles.instructionBox}>
+                  <p style={styles.instructionText}>
+                    🗺️ Click anywhere on the map to start residential market analysis
+                  </p>
+                </div>
+              )}
+
+              {/* Residential Analysis Results */}
+              {residentialAnalysis && (
+                <div style={styles.resultsSection}>
+                  <h6 style={styles.resultsTitle}>📊 Market Analysis</h6>
+                  
+                  <div style={styles.statsGrid}>
+                    <div style={styles.statItem}>
+                      <span style={styles.statLabel}>Total Buildings</span>
+                      <span style={styles.statValue}>{residentialAnalysis.totalBuildings}</span>
+                    </div>
+                    <div style={styles.statItem}>
+                      <span style={styles.statLabel}>Average Price</span>
+                      <span style={styles.statValue}>
+                        {residentialAnalysis.averagePrice ? 
+                          `€${residentialAnalysis.averagePrice.toLocaleString()}` : 'N/A'}
+                      </span>
+                    </div>
+                    <div style={styles.statItem}>
+                      <span style={styles.statLabel}>Median Price</span>
+                      <span style={styles.statValue}>
+                        {residentialAnalysis.medianPrice ? 
+                          `€${residentialAnalysis.medianPrice.toLocaleString()}` : 'N/A'}
+                      </span>
+                    </div>
+                    <div style={styles.statItem}>
+                      <span style={styles.statLabel}>Avg Price/m²</span>
+                      <span style={styles.statValue}>
+                        {residentialAnalysis.avgPricePerSqm ? 
+                          `€${residentialAnalysis.avgPricePerSqm.toLocaleString()}` : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {residentialAnalysis.propertyTypes && (
+                    <div style={styles.propertyTypes}>
+                      <h6 style={styles.subTitle}>Property Types</h6>
+                      <div style={styles.typeGrid}>
+                        <div style={styles.typeItem}>
+                          <span>For Sale: {residentialAnalysis.propertyTypes.forSale}</span>
+                        </div>
+                        <div style={styles.typeItem}>
+                          <span>For Rent: {residentialAnalysis.propertyTypes.forRent}</span>
+                        </div>
+                        <div style={styles.typeItem}>
+                          <span>Houses: {residentialAnalysis.propertyTypes.houses}</span>
+                        </div>
+                        <div style={styles.typeItem}>
+                          <span>Apartments: {residentialAnalysis.propertyTypes.apartments}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Buildings List */}
+                  {residentialBuildings && residentialBuildings.length > 0 && (
+                    <div style={styles.buildingsSection}>
+                      <h6 style={styles.subTitle}>
+                        🏘️ Buildings ({residentialBuildings.length})
+                      </h6>
+                      <div style={styles.buildingsList}>
+                        {residentialBuildings.slice(0, 10).map((building, index) => (
+                          <div key={building.id || index} style={styles.buildingItem}>
+                            <div style={styles.buildingAddress}>
+                              {building.address || 'Address not available'}
+                            </div>
+                            <div style={styles.buildingDetails}>
+                              <span style={styles.buildingDetailSpan}>{building.price ? `€${building.price.toLocaleString()}` : 'N/A'}</span>
+                              <span style={styles.buildingDetailSpan}>{building.size ? `${building.size}m²` : 'N/A'}</span>
+                              <span style={styles.buildingDetailSpan}>{building.rooms ? `${building.rooms} rooms` : 'N/A'}</span>
+                            </div>
+                            <div style={styles.buildingDistance}>
+                              {Math.round(building.distance)}m away
+                            </div>
+                          </div>
+                        ))}
+                        {residentialBuildings.length > 10 && (
+                          <div style={styles.moreBuildings}>
+                            And {residentialBuildings.length - 10} more buildings...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Export Button */}
+                  <div style={styles.exportSection}>
+                    <button 
+                      onClick={onResidentialExport}
+                      style={styles.exportButton}
+                      disabled={!residentialAnalysis || !residentialBuildings?.length}
+                    >
+                      📊 Export to Excel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : showCatchmentMode ? (
             // CATCHMENT MODE
             <div style={styles.searchSection}>
           <h5 style={styles.sectionTitle}>
@@ -680,17 +838,45 @@ const radiusOptions = [
         </div>
         {/* End Scrollable Content */}
 
-        {/* Fixed Toggle Mode Button at bottom */}
+        {/* Fixed Toggle Mode Buttons at bottom */}
         <div style={styles.fixedBottomButton}>
-          <button
-            onClick={onToggleMode}
-            style={{
-              ...styles.toggleModeButton,
-              backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545'
-            }}
-          >
-            {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
-          </button>
+          {/* View Mode Switcher */}
+          <div style={styles.viewModeSection}>
+            <div style={styles.viewModeLabel}>Analysis Mode:</div>
+            <div style={styles.viewModeButtons}>
+              <button
+                onClick={() => onViewChange && onViewChange('business')}
+                style={{
+                  ...styles.viewModeButton,
+                  ...(currentView === 'business' ? styles.viewModeButtonActive : {})
+                }}
+              >
+                🏢 Business
+              </button>
+              <button
+                onClick={() => onViewChange && onViewChange('residential')}
+                style={{
+                  ...styles.viewModeButton,
+                  ...(currentView === 'residential' ? styles.viewModeButtonActive : {})
+                }}
+              >
+                🏠 Residential
+              </button>
+            </div>
+          </div>
+
+          {/* Business Mode Toggle (only show in business view) */}
+          {currentView === 'business' && (
+            <button
+              onClick={onToggleMode}
+              style={{
+                ...styles.toggleModeButton,
+                backgroundColor: showCatchmentMode ? '#28a745' : '#dc3545'
+              }}
+            >
+              {showCatchmentMode ? '🔍 Switch to Places' : '📊 Switch to Catchment'}
+            </button>
+          )}
         </div>
     </div>
   );
@@ -965,19 +1151,6 @@ const styles = {
     padding: '4px 6px',
     borderRadius: '4px',
     marginBottom: '4px'
-  },
-  timeChip: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 10px',
-    backgroundColor: '#17E88F',
-    color: '#032842',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: '500',
-    minWidth: '60px',
-    justifyContent: 'center'
   },
   colorPicker: {
     width: '28px',
@@ -1669,6 +1842,183 @@ const styles = {
     borderTop: '1px solid rgba(255,255,255,0.1)',
     backgroundColor: '#032842',
     flexShrink: 0
+  },
+  viewModeSection: {
+    marginBottom: '10px'
+  },
+  viewModeLabel: {
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: '8px',
+    fontWeight: '500'
+  },
+  viewModeButtons: {
+    display: 'flex',
+    gap: '5px'
+  },
+  viewModeButton: {
+    flex: 1,
+    padding: '8px 12px',
+    background: 'rgba(255,255,255,0.1)',
+    color: 'rgba(255,255,255,0.7)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '500',
+    transition: 'all 0.2s ease'
+  },
+  viewModeButtonActive: {
+    background: '#007bff',
+    color: 'white',
+    borderColor: '#007bff'
+  },
+  radiusControl: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  numberInput: {
+    width: '80px',
+    padding: '8px',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: 'white',
+    fontSize: '14px'
+  },
+  unitLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: '14px'
+  },
+  resultsSection: {
+    marginTop: '20px',
+    padding: '15px',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: '8px'
+  },
+  resultsTitle: {
+    margin: '0 0 15px 0',
+    color: 'white',
+    fontSize: '16px',
+    fontWeight: '600'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px',
+    marginBottom: '15px'
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+  statLabel: {
+    fontSize: '11px',
+    color: 'rgba(255,255,255,0.7)',
+    textTransform: 'uppercase',
+    fontWeight: '500'
+  },
+  statValue: {
+    fontSize: '14px',
+    color: 'white',
+    fontWeight: '600'
+  },
+  propertyTypes: {
+    marginBottom: '15px'
+  },
+  subTitle: {
+    margin: '0 0 10px 0',
+    color: 'white',
+    fontSize: '14px',
+    fontWeight: '600'
+  },
+  typeGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px'
+  },
+  typeItem: {
+    padding: '8px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: '4px',
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center'
+  },
+  buildingsSection: {
+    marginTop: '15px'
+  },
+  buildingsList: {
+    maxHeight: '300px',
+    overflowY: 'auto'
+  },
+  buildingItem: {
+    padding: '10px',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: '6px',
+    marginBottom: '8px',
+    border: '1px solid rgba(255,255,255,0.1)'
+  },
+  buildingAddress: {
+    fontSize: '13px',
+    color: 'white',
+    fontWeight: '500',
+    marginBottom: '5px'
+  },
+  buildingDetails: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '4px'
+  },
+  buildingDetailSpan: {
+    fontSize: '11px',
+    color: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: '2px 6px',
+    borderRadius: '3px'
+  },
+  buildingDistance: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.6)'
+  },
+  moreBuildings: {
+    textAlign: 'center',
+    padding: '10px',
+    color: 'rgba(255,255,255,0.7)',
+    fontStyle: 'italic',
+    fontSize: '12px'
+  },
+  exportSection: {
+    marginTop: '15px',
+    paddingTop: '15px',
+    borderTop: '1px solid rgba(255,255,255,0.1)'
+  },
+  exportButton: {
+    width: '100%',
+    padding: '10px',
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease'
+  },
+  launchButton: {
+    width: '100%',
+    padding: '12px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    marginTop: '10px',
+    transition: 'background-color 0.2s ease'
   },
   toggleModeButton: {
     width: '100%',

@@ -3213,6 +3213,271 @@ app.post('/api/place-details', async (req, res) => {
     }
 });
 
+// Residential Analysis - Get buildings within radius
+app.post('/api/residential/buildings-in-radius', async (req, res) => {
+    const { lat, lng, radius_km = 1.0 } = req.body;
+
+    if (!lat || !lng) {
+        return res.status(400).json({ 
+            error: 'lat and lng are required' 
+        });
+    }
+
+    try {
+        console.log(`Fetching buildings within ${radius_km}km of ${lat}, ${lng}`);
+        
+        // Load and parse the data files
+        const fs = require('fs');
+        const path = require('path');
+        
+        const data1Path = path.join(__dirname, 'data', 'data_1.json');
+        const data2Path = path.join(__dirname, 'data', 'data_2.json');
+        
+        let buildingsData = [];
+        
+        // Read data from both files if they exist
+        if (fs.existsSync(data1Path)) {
+            const rawData1 = fs.readFileSync(data1Path, 'utf8');
+            const data1 = JSON.parse(rawData1);
+            buildingsData = buildingsData.concat(Array.isArray(data1) ? data1 : []);
+        }
+        
+        if (fs.existsSync(data2Path)) {
+            const rawData2 = fs.readFileSync(data2Path, 'utf8');
+            const data2 = JSON.parse(rawData2);
+            buildingsData = buildingsData.concat(Array.isArray(data2) ? data2 : []);
+        }
+        
+        if (buildingsData.length === 0) {
+            return res.status(404).json({ error: 'No building data found' });
+        }
+        
+        console.log(`Loaded ${buildingsData.length} buildings from data files`);
+        
+        // Haversine distance function
+        const haversine = (lat1, lon1, lat2, lon2) => {
+            const R = 6371; // Earth's radius in kilometers
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        };
+
+        // Filter buildings within radius
+        const buildingsInRadius = [];
+        const refLat = parseFloat(lat);
+        const refLng = parseFloat(lng);
+        const maxDistance = parseFloat(radius_km);
+
+        for (const building of buildingsData) {
+            // Use the correct field names from the JSON structure
+            const buildingLat = parseFloat(building.Latitude);
+            const buildingLng = parseFloat(building.Longitude);
+            
+            if (buildingLat && buildingLng && !isNaN(buildingLat) && !isNaN(buildingLng)) {
+                const distance = haversine(refLat, refLng, buildingLat, buildingLng);
+                
+                if (distance <= maxDistance) {
+                    buildingsInRadius.push({
+                        id: building.Id,
+                        latitude: buildingLat,
+                        longitude: buildingLng,
+                        address: building.Address,
+                        price: building.Value ? parseFloat(building.Value) : null,
+                        size: building.Surface ? parseFloat(building.Surface) : null,
+                        rooms: building.Rooms ? parseInt(building.Rooms) : null,
+                        bathrooms: building.Bathrooms ? parseInt(building.Bathrooms) : null,
+                        constructionYear: building.ConstructionYear,
+                        energyLabel: building.EnergyLabel,
+                        usage: building.Usage, // 'h' for house, 'a' for apartment
+                        operation: building.Operation, // 's' for sale, 'r' for rent
+                        provinceName: building.ProvinceName,
+                        cityName: building.CityName,
+                        postalCode: building.PostalCode,
+                        unitValue: building.UnitValue ? parseFloat(building.UnitValue) : null, // Price per m²
+                        plotSurface: building.PlotSurface ? parseFloat(building.PlotSurface) : null,
+                        floor: building.Floor,
+                        lift: building.Lift,
+                        date: building.Date,
+                        distance: distance * 1000, // Convert to meters
+                        ...building // Include all original fields
+                    });
+                }
+            }
+        }
+
+        // Calculate comprehensive statistics using the correct field names
+        const prices = buildingsInRadius.filter(b => b.price && b.price > 0).map(b => b.price);
+        const sizes = buildingsInRadius.filter(b => b.size && b.size > 0).map(b => b.size);
+        const unitValues = buildingsInRadius.filter(b => b.unitValue && b.unitValue > 0).map(b => b.unitValue);
+        
+        // Property type breakdown with debugging
+        console.log('Sample building data for debugging:', buildingsInRadius.slice(0, 3).map(b => ({
+            usage: b.usage,
+            operation: b.operation,
+            originalUsage: b.Usage,
+            originalOperation: b.Operation
+        })));
+        
+        const forSale = buildingsInRadius.filter(b => b.operation === 's' || b.Operation === 's').length;
+        const forRent = buildingsInRadius.filter(b => b.operation === 'r' || b.Operation === 'r').length;
+        const houses = buildingsInRadius.filter(b => b.usage === 'h' || b.Usage === 'h').length;
+        const apartments = buildingsInRadius.filter(b => b.usage === 'a' || b.Usage === 'a').length;
+        
+        // Room distribution
+        const roomCounts = buildingsInRadius.filter(b => b.rooms).reduce((acc, b) => {
+            const rooms = b.rooms;
+            acc[rooms] = (acc[rooms] || 0) + 1;
+            return acc;
+        }, {});
+        
+        const calculations = {
+            totalBuildings: buildingsInRadius.length,
+            averagePrice: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : null,
+            medianPrice: prices.length > 0 ? prices.sort((a, b) => a - b)[Math.floor(prices.length / 2)] : null,
+            totalValue: prices.length > 0 ? prices.reduce((a, b) => a + b, 0) : null,
+            avgPricePerSqm: unitValues.length > 0 ? Math.round(unitValues.reduce((a, b) => a + b, 0) / unitValues.length) : null,
+            avgSize: sizes.length > 0 ? Math.round(sizes.reduce((a, b) => a + b, 0) / sizes.length) : null,
+            priceRange: prices.length > 0 ? {
+                min: Math.min(...prices),
+                max: Math.max(...prices)
+            } : null,
+            propertyTypes: {
+                forSale: forSale,
+                forRent: forRent,
+                houses: houses,
+                apartments: apartments
+            },
+            roomDistribution: roomCounts,
+            averageRooms: buildingsInRadius.filter(b => b.rooms).length > 0 ? 
+                Math.round((buildingsInRadius.filter(b => b.rooms).reduce((sum, b) => sum + b.rooms, 0) / 
+                buildingsInRadius.filter(b => b.rooms).length) * 10) / 10 : null
+        };
+
+        console.log(`Found ${buildingsInRadius.length} buildings within ${radius_km}km`);
+
+        res.json({
+            success: true,
+            center: { lat: refLat, lng: refLng },
+            radius_km: maxDistance,
+            buildings: buildingsInRadius,
+            calculations: calculations
+        });
+
+    } catch (error) {
+        console.error('Error fetching buildings in radius:', error);
+        res.status(500).json({ 
+            error: 'Failed to fetch building data',
+            details: error.message 
+        });
+    }
+});
+
+// Export residential analysis to Excel
+app.post('/api/residential/export-excel', async (req, res) => {
+    const { marketAnalysis, buildings, location, radius } = req.body;
+
+    if (!marketAnalysis || !buildings) {
+        return res.status(400).json({ error: 'Missing market analysis or buildings data' });
+    }
+
+    try {
+        const ExcelJS = require('exceljs');
+        const workbook = new ExcelJS.Workbook();
+
+        // Market Analysis Summary Sheet
+        const summarySheet = workbook.addWorksheet('Market Analysis');
+        
+        // Header
+        summarySheet.addRow(['Residential Market Analysis Report']);
+        summarySheet.addRow(['Generated:', new Date().toLocaleDateString()]);
+        summarySheet.addRow(['Location:', location ? `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}` : 'N/A']);
+        summarySheet.addRow(['Radius:', radius ? `${radius.radius}km` : '1km']);
+        summarySheet.addRow([]);
+
+        // Market Statistics
+        summarySheet.addRow(['Market Statistics']);
+        summarySheet.addRow(['Total Buildings:', marketAnalysis.totalBuildings]);
+        summarySheet.addRow(['Average Price:', marketAnalysis.averagePrice ? `€${marketAnalysis.averagePrice.toLocaleString()}` : 'N/A']);
+        summarySheet.addRow(['Median Price:', marketAnalysis.medianPrice ? `€${marketAnalysis.medianPrice.toLocaleString()}` : 'N/A']);
+        summarySheet.addRow(['Price per m²:', marketAnalysis.avgPricePerSqm ? `€${marketAnalysis.avgPricePerSqm.toLocaleString()}` : 'N/A']);
+        summarySheet.addRow(['Average Size:', marketAnalysis.avgSize ? `${marketAnalysis.avgSize}m²` : 'N/A']);
+        summarySheet.addRow(['Total Market Value:', marketAnalysis.totalValue ? `€${(marketAnalysis.totalValue/1000000).toFixed(1)}M` : 'N/A']);
+        summarySheet.addRow(['Average Rooms:', marketAnalysis.averageRooms || 'N/A']);
+        summarySheet.addRow([]);
+
+        // Property Types
+        if (marketAnalysis.propertyTypes) {
+            summarySheet.addRow(['Property Type Breakdown']);
+            summarySheet.addRow(['For Sale:', marketAnalysis.propertyTypes.forSale]);
+            summarySheet.addRow(['For Rent:', marketAnalysis.propertyTypes.forRent]);
+            summarySheet.addRow(['Houses:', marketAnalysis.propertyTypes.houses]);
+            summarySheet.addRow(['Apartments:', marketAnalysis.propertyTypes.apartments]);
+            summarySheet.addRow([]);
+        }
+
+        // Buildings Details Sheet
+        const buildingsSheet = workbook.addWorksheet('Building Details');
+        
+        // Headers
+        buildingsSheet.addRow([
+            'ID', 'Address', 'Price (€)', 'Size (m²)', 'Price/m² (€)', 'Rooms', 'Bathrooms',
+            'Construction Year', 'Energy Label', 'Usage', 'Operation', 'Province', 'City',
+            'Postal Code', 'Plot Surface', 'Distance (m)', 'Latitude', 'Longitude'
+        ]);
+
+        // Building data
+        buildings.forEach(building => {
+            buildingsSheet.addRow([
+                building.id,
+                building.address,
+                building.price,
+                building.size,
+                building.unitValue,
+                building.rooms,
+                building.bathrooms,
+                building.constructionYear,
+                building.energyLabel,
+                building.usage,
+                building.operation,
+                building.provinceName,
+                building.cityName,
+                building.postalCode,
+                building.plotSurface,
+                Math.round(building.distance),
+                building.latitude,
+                building.longitude
+            ]);
+        });
+
+        // Style the sheets
+        summarySheet.getCell('A1').font = { bold: true, size: 16 };
+        buildingsSheet.getRow(1).font = { bold: true };
+        
+        // Auto-fit columns
+        summarySheet.columns.forEach(column => {
+            column.width = 20;
+        });
+        buildingsSheet.columns.forEach(column => {
+            column.width = 15;
+        });
+
+        // Generate Excel file
+        const buffer = await workbook.xlsx.writeBuffer();
+        
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=residential_analysis.xlsx');
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Error generating Excel export:', error);
+        res.status(500).json({ error: 'Failed to generate Excel export' });
+    }
+});
+
 // Health check endpoint
 app.get('/hello', (req, res) => {
     res.json({ 

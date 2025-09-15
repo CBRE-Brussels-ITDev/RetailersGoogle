@@ -63,6 +63,19 @@ function App() {
   const [analysisResults, setAnalysisResults] = useState(null);
   const [showRankingReport, setShowRankingReport] = useState(false);
 
+  // View mode state
+  const [currentView, setCurrentView] = useState('business'); // 'business' or 'residential'
+  
+  // Debug view changes
+  useEffect(() => {
+    console.log('🔄 View changed to:', currentView);
+  }, [currentView]);
+
+  // Residential analysis state
+  const [residentialBuildings, setResidentialBuildings] = useState([]);
+  const [residentialAnalysis, setResidentialAnalysis] = useState(null);
+  const [residentialRadius, setResidentialRadius] = useState({ radius: 1, unit: 'km' });
+
     // Track last place click to prevent reverse geocoding on marker click
     const lastPlaceClickRef = useRef(null);
 
@@ -81,28 +94,44 @@ function App() {
       }
     };
 
-  const handleMapClick = async (lat, lng) => {
+  const handleMapClick = async (latOrEvent, lng) => {
+    // Handle event object from residential mode
+    let lat, lon;
+    if (typeof latOrEvent === 'object' && latOrEvent.mapPoint) {
+      lat = latOrEvent.mapPoint.latitude;
+      lon = latOrEvent.mapPoint.longitude;
+    } else {
+      lat = latOrEvent;
+      lon = lng;
+    }
+
+    // Handle residential mode differently
+    console.log('🗺️ Map clicked at:', lat, lon, 'Current view:', currentView);
+    if (currentView === 'residential') {
+      return handleResidentialMapClick(lat, lon);
+    }
+
     // Prevent reverse geocoding if a place marker was just clicked
     if (lastPlaceClickRef.current && Date.now() - lastPlaceClickRef.current < 300) {
       console.log('Map click ignored due to recent place marker click');
       return;
     }
-    setSelectedLocation({ lat, lng });
-    console.log('Map clicked at:', { lat, lng });
+    setSelectedLocation({ lat, lng: lon });
+    console.log('Map clicked at:', { lat, lng: lon });
     // Get address from coordinates using reverse geocoding
     try {
-      const address = await GooglePlacesService.reverseGeocode(lat, lng);
+      const address = await GooglePlacesService.reverseGeocode(lat, lon);
       if (address) {
         setSelectedAddress(address);
         console.log('Address found:', address);
       } else {
         // Fallback to coordinates if no address found
-        setSelectedAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        setSelectedAddress(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
       }
     } catch (error) {
       console.error('Error getting address:', error);
       // Fallback to coordinates if reverse geocoding fails
-      setSelectedAddress(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+      setSelectedAddress(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
     }
     // Only clear search results in places mode
     if (!showCatchmentMode) {
@@ -112,6 +141,53 @@ function App() {
       if (mapRef.current) {
         mapRef.current.clearCircle();
       }
+    }
+  };
+
+  // Handle residential map clicks
+  const handleResidentialMapClick = async (lat, lng) => {
+    console.log('🏠 Residential map click at:', lat, lng);
+    setSelectedLocation({ lat, lng });
+    setIsLoading(true);
+    
+    try {
+      console.log('📍 Starting residential analysis...');
+      const response = await fetch('http://localhost:8080/api/residential/buildings-in-radius', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          lat: lat,
+          lng: lng,
+          radius_km: residentialRadius.radius
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setResidentialBuildings(data.buildings);
+        setResidentialAnalysis(data.calculations);
+        console.log(`✅ Found ${data.buildings.length} buildings in radius`);
+        console.log('📊 Market Analysis:', data.calculations);
+        
+        // Add radius circle and building markers to map
+        if (mapRef.current) {
+          await mapRef.current.addRadiusCircle({ lat, lng }, residentialRadius.radius);
+          await mapRef.current.addBuildingMarkers(data.buildings);
+        }
+      } else {
+        console.error('❌ Failed to fetch buildings:', data.error);
+      }
+    } catch (error) {
+      console.error('💥 Error fetching buildings in radius:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -779,10 +855,54 @@ function App() {
     }
   };
 
+  // Export residential analysis to Excel
+  const handleResidentialExportExcel = async () => {
+    if (!residentialAnalysis || !residentialBuildings.length) {
+      alert('No residential data to export');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch('http://localhost:8080/api/residential/export-excel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          marketAnalysis: residentialAnalysis,
+          buildings: residentialBuildings,
+          location: selectedLocation,
+          radius: residentialRadius
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Download the file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'residential_analysis.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting residential data to Excel:', error);
+      alert('Failed to export residential data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div style={{ position: 'relative', height: '100vh', width: '100vw' }}>
       
-      {/* Map Container - Full screen */}
+      {/* Map Container - Full screen for both modes */}
       <div style={{ 
         width: '100%',
         height: '100%',
@@ -799,6 +919,9 @@ function App() {
           searchResultsData={searchResultsData}
           catchmentData={catchmentData}
           onClearAll={clearSearch}
+          buildings={currentView === 'residential' ? residentialBuildings : []}
+          radius={currentView === 'residential' ? residentialRadius : null}
+          mode={currentView}
           style={{ width: '100%', height: '100%' }}
         />
 
@@ -949,6 +1072,14 @@ function App() {
         onClearAll={clearSearch}
         onToggleMode={toggleCatchmentMode}
         onShowCommerceAnalysis={!showCatchmentMode ? handleShowCommerceAnalysis : null}
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        residentialBuildings={residentialBuildings}
+        residentialAnalysis={residentialAnalysis}
+        residentialRadius={residentialRadius}
+        onResidentialExport={handleResidentialExportExcel}
+        onResidentialAnalyze={handleResidentialMapClick}
+        onResidentialRadiusChange={setResidentialRadius}
       />
 
       {/* Right Sidebar for Place Details - Available in both modes */}
@@ -1050,13 +1181,13 @@ function App() {
       )}
     </div>
   );
-}
+};
 
 const styles = {
   searchContainer: {
     position: 'absolute',
     top: '20px',
-    // left position will be set dynamically
+    left: '20px', // Left position will be set dynamically
     display: 'flex',
     gap: '5px',
     alignItems: 'center',
